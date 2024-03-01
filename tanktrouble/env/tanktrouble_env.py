@@ -47,6 +47,7 @@ class TankTrouble(ParallelEnv):
         self.ball_speed = self.tank_speed*2
         self.max_speed = 5.0
         self.p_wall = 0.4
+        self.ball_lifetime = 200
 
         self.min_start_dist = max(self.size_x, self.size_y) / 1.33
 
@@ -64,24 +65,28 @@ class TankTrouble(ParallelEnv):
         self.action_spaces[0] = MultiBinary(5)
         self.action_spaces[1] = MultiBinary(5)
         self.observation_spaces[0] = Tuple(
-            [MultiBinary([self.size_x + 1, self.size_y]), MultiBinary([self.size_x, self.size_y + 1]),
+            [MultiBinary([self.size_x + 1, self.size_y+1]), MultiBinary([self.size_x+1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # other state
              Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # own balls
-             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # other balls
+             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(5, self.max_balls)),  # other balls
+             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)), # own balls remaining life
+             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)), # other balls remaining life
              MultiBinary([self.max_balls]),  # own balls valid
              MultiBinary([self.max_balls]),  # other balls valid
              Box(low=0, high=self.remaining_time, shape=(1,))])
         self.observation_spaces[1] = Tuple(
-            [MultiBinary([self.size_x + 1, self.size_y]), MultiBinary([self.size_x, self.size_y + 1]),
+            [MultiBinary([self.size_x + 1, self.size_y+1]), MultiBinary([self.size_x+1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # other state
              Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # own balls
-             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # other balls
+             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(5, self.max_balls)),  # other balls
+             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)), # own balls remaining life
+             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)), # other balls remaining life
              MultiBinary([self.max_balls]),  # own balls valid
              MultiBinary([self.max_balls]),  # other balls valid
              Box(low=0, high=self.remaining_time, shape=(1,))])
@@ -322,7 +327,7 @@ class TankTrouble(ParallelEnv):
 
 
     def ball_step(self, ball, t=0):
-        eps = 0.00001
+        eps = 0.00000001
         if t >= 1:
             return ball.x, ball.y, ball.vx, ball.vy
         next_x = ball.x + ball.vx
@@ -353,16 +358,16 @@ class TankTrouble(ParallelEnv):
         if min_t_h < min_t_v:
             # we step to the point of collision, and then we invert the y velocity, and we step again
             collision_x = ball.x + ball.vx * min_t_h
-            collision_y = ball.y + ball.vy * min_t_h
+            collision_y = collisions_h[0][2]
             new_vy = -ball.vy
             new_vx = ball.vx
-            return self.ball_step(Ball(collision_x + eps*new_vx, collision_y+eps*new_vy, new_vx, new_vy, ball.life), t + min_t_h)
+            return self.ball_step(Ball(collision_x, collision_y+eps, new_vx, new_vy, ball.life), t + min_t_h)
         else:
-            collision_x = ball.x + ball.vx * min_t_v
+            collision_x = collisions_v[0][1]
             collision_y = ball.y + ball.vy * min_t_v
             new_vx = -ball.vx
             new_vy = ball.vy
-            return self.ball_step(Ball(collision_x + eps*new_vx, collision_y+eps*new_vy, new_vx, new_vy, ball.life), t + min_t_v)
+            return self.ball_step(Ball(collision_x + eps, collision_y, new_vx, new_vy, ball.life), t + min_t_v)
 
     def player_player_collision(self, p1x, p1y, p1rot, p2x, p2y, p2rot):
         c1, c2, c3, c4 = self.get_player_corners(p1x, p1y, p1rot)
@@ -440,10 +445,10 @@ class TankTrouble(ParallelEnv):
 
         if p1_action[4]:
             self.p1_balls[1:-1] = self.p1_balls[0:-2]
-            self.p1_balls[0] = Ball(front[0], front[1], self.ball_speed * math.cos(self.p1_direction), self.ball_speed * math.sin(self.p1_direction), 100)
+            self.p1_balls[0] = Ball(front[0], front[1], self.ball_speed * math.cos(self.p1_direction), self.ball_speed * math.sin(self.p1_direction), self.ball_lifetime)
         if p2_action[4]:
             self.p2_balls[1:-1] = self.p2_balls[0:-2]
-            self.p2_balls[0] = Ball(front[0], front[1], self.ball_speed * math.cos(self.p2_direction), self.ball_speed * math.sin(self.p2_direction), 100)
+            self.p2_balls[0] = Ball(front[0], front[1], self.ball_speed * math.cos(self.p2_direction), self.ball_speed * math.sin(self.p2_direction), self.ball_lifetime)
 
         for ball in self.p1_balls:
             if ball.life > 0:
@@ -453,11 +458,6 @@ class TankTrouble(ParallelEnv):
             if ball.life > 0:
                 ball.x, ball.y, ball.vx, ball.vy = self.ball_step(ball)
                 ball.life -= 1
-
-        for ball in self.p1_balls:
-            if ball.life > 0:
-                next_x = ball.x + ball.vx
-                next_y = ball.y + ball.vy
 
 
         self.p2_v = min(self.p2_v, self.tank_speed)
