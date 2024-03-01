@@ -138,8 +138,8 @@ class TankTrouble(ParallelEnv):
             if sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2) > self.min_start_dist:
                 break
 
-        self.p1_direction = random.random() * 2 * 3.14159
-        self.p2_direction = random.random() * 2 * 3.14159
+        self.p1_direction = random.random() * 2 * math.pi
+        self.p2_direction = random.random() * 2 * math.pi
         self.p1_v = 0.0
         self.p2_v = 0.0
         self.remaining_time = 100
@@ -196,7 +196,7 @@ class TankTrouble(ParallelEnv):
 
         # draw a rectangle at x, y with the direction
         rect = plt.Rectangle((x - self.tank_length / 2, y - self.tank_width / 2), self.tank_length, self.tank_width,
-                             angle=direction * 180 / 3.14159, color=color, rotation_point=(x, y))
+                             angle=direction * 180 / math.pi, color=color, rotation_point=(x, y))
 
         px = x
         py = y
@@ -419,7 +419,7 @@ class TankTrouble(ParallelEnv):
 
         self.p1_v = min(self.p1_v, self.tank_speed)
         self.p1_v = max(self.p1_v, -self.tank_speed)
-        self.p1_direction = self.p1_direction % (2 * 3.14159)
+        self.p1_direction = self.p1_direction % (2 * math.pi)
 
         if p2_action[0]:
             self.p2_v += self.tank_speed / acc_time
@@ -462,7 +462,7 @@ class TankTrouble(ParallelEnv):
 
         self.p2_v = min(self.p2_v, self.tank_speed)
         self.p2_v = max(self.p2_v, -self.tank_speed)
-        self.p2_direction = self.p2_direction % (2 * 3.14159)
+        self.p2_direction = self.p2_direction % (2 * math.pi)
         # we move the players
         self.p1_x += self.p1_v * math.cos(self.p1_direction)
         self.p1_y += self.p1_v * math.sin(self.p1_direction)
