@@ -42,7 +42,12 @@ while True:
 
     # print(actions_1)
 
-    env.step({0: actions_1, 1: [False, False, False, False, False]})
+    observations, rewards, terminations, truncations, infos = env.step({0: actions_1, 1: [False, False, False, False, False]})
+
+    print(terminations)
+
+    if any(terminations.values()):
+        env.reset()
 
     # print(env.p1_x)
     # print(env.p1_y)

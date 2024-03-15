@@ -147,7 +147,7 @@ class TankTrouble(ParallelEnv):
         self.p2_direction = random.random() * 2 * math.pi
         self.p1_v = 0.0
         self.p2_v = 0.0
-        self.remaining_time = 100
+        self.remaining_time = 1000
         self.p1_balls = [Ball() for _ in range(self.max_balls)]
         self.p2_balls = [Ball() for _ in range(self.max_balls)]
 
@@ -387,6 +387,18 @@ class TankTrouble(ParallelEnv):
             return False
         return True
 
+    def ball_player_collision(self, ball, px, py, rot):
+        c1, c2, c3, c4 = self.get_player_corners(px, py, rot)
+        if not self.sat_test([c1, c2, c3, c4], [[ball.x, ball.y]], [1, 0]):
+            return False
+        if not self.sat_test([c1, c2, c3, c4], [[ball.x, ball.y]], [0, 1]):
+            return False
+        if not self.sat_test([c1, c2, c3, c4], [[ball.x, ball.y]], [math.cos(rot), math.sin(rot)]):
+            return False
+        if not self.sat_test([c1, c2, c3, c4], [[ball.x, ball.y]], [math.cos(rot + math.pi/2), math.sin(rot + math.pi/2)]):
+            return False
+        return True
+
 
 
 
@@ -497,11 +509,68 @@ class TankTrouble(ParallelEnv):
         dones = [False, False]
         truncations = [False, False]
         infos = [None, None]
+        fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
+
+
+        observations = {0: (self.horizontal_walls, self.vertical_walls,
+                            [self.p1_x, self.p1_y, self.p1_v, self.p1_direction],
+                            [self.p2_x, self.p2_y, self.p2_v, self.p2_direction],
+                            fill([ball.x for ball in self.p1_balls], self.max_balls),
+                            fill([ball.y for ball in self.p1_balls], self.max_balls),
+                            fill([ball.vx for ball in self.p1_balls], self.max_balls),
+                            fill([ball.vy for ball in self.p1_balls], self.max_balls),
+                            fill([ball.x for ball in self.p2_balls], self.max_balls),
+                            fill([ball.y for ball in self.p2_balls], self.max_balls),
+                            fill([ball.vx for ball in self.p2_balls], self.max_balls),
+                            fill([ball.vy for ball in self.p2_balls], self.max_balls),
+                            fill([ball.life for ball in self.p1_balls], self.max_balls),
+                            fill([ball.life for ball in self.p2_balls], self.max_balls),
+                            [0 if i >= len(self.p1_balls) else 1 if self.p1_balls[i].life > 0 else 0 for i in range(self.max_balls)],
+                            [0 if i >= len(self.p2_balls) else 1 if self.p2_balls[i].life > 0 else 0 for i in range(self.max_balls)],
+                            [self.remaining_time]),
+                        1: (self.horizontal_walls, self.vertical_walls,
+                            [self.p2_x, self.p2_y, self.p2_v, self.p2_direction],
+                            [self.p1_x, self.p1_y, self.p1_v, self.p1_direction],
+                            fill([ball.x for ball in self.p2_balls], self.max_balls),
+                            fill([ball.y for ball in self.p2_balls], self.max_balls),
+                            fill([ball.vx for ball in self.p2_balls], self.max_balls),
+                            fill([ball.vy for ball in self.p2_balls], self.max_balls),
+                            fill([ball.x for ball in self.p1_balls], self.max_balls),
+                            fill([ball.y for ball in self.p1_balls], self.max_balls),
+                            fill([ball.vx for ball in self.p1_balls], self.max_balls),
+                            fill([ball.vy for ball in self.p1_balls], self.max_balls),
+                            fill([ball.life for ball in self.p2_balls], self.max_balls),
+                            fill([ball.life for ball in self.p1_balls], self.max_balls),
+                            [0 if i >= len(self.p2_balls) else 1 if self.p2_balls[i].life > 0 else 0 for i in range(self.max_balls)],
+                            [0 if i >= len(self.p1_balls) else 1 if self.p1_balls[i].life > 0 else 0 for i in range(self.max_balls)],
+                            )}
+
 
         self.remaining_time -= 1
 
+        p1_hit = any([self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p2_balls + self.p1_balls])
+        p2_hit = any([self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p1_balls + self.p2_balls])
+
+        if p1_hit and p2_hit:
+            rewards = [0, 0]
+            dones = [True, True]
+
+        if p1_hit:
+            rewards = [-1, 1]
+            dones = [True, True]
+
+        if p2_hit:
+            rewards = [1, -1]
+            dones = [True, True]
+
         if self.remaining_time <= 0:
             dones = [True, True]
+            rewards = [0, 0]
+
+        dones = {0: dones[0], 1: dones[1]}
+        rewards = {0: rewards[0], 1: rewards[1]}
+        truncations = {0: False, 1: False}
+        infos = {0: {}, 1: {}}
 
         return observations, rewards, dones, truncations, infos
 
