@@ -31,6 +31,7 @@ class TankTrouble(ParallelEnv):
     }
 
     def __init__(self, s_x=8, s_y=5):
+        self.agents = [0, 1]
         self.tank_length = 0.5
         self.tank_width = 0.3
         self.tank_speed = 0.05
@@ -150,6 +151,7 @@ class TankTrouble(ParallelEnv):
         self.remaining_time = 1000
         self.p1_balls = [Ball() for _ in range(self.max_balls)]
         self.p2_balls = [Ball() for _ in range(self.max_balls)]
+        self.agents = [0, 1]
 
         while True:
             self.horizontal_walls = [[random.random() - (1 if idx in [0, self.size_y] else 0) < self.p_wall for idx in
@@ -163,7 +165,7 @@ class TankTrouble(ParallelEnv):
                 break
 
         print("reset")
-        pass
+        return self.get_obs(), {0: {}, 1: {}}
 
     def display_state(self, show=True):
         # we draw the state using matplotlib
@@ -512,6 +514,44 @@ class TankTrouble(ParallelEnv):
         fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
 
 
+        observations = self.get_obs()
+
+
+        self.remaining_time -= 1
+
+        p1_hit = any([self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p2_balls + self.p1_balls])
+        p2_hit = any([self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p1_balls + self.p2_balls])
+
+        if p1_hit and p2_hit:
+            rewards = [0, 0]
+            dones = [True, True]
+
+        if p1_hit:
+            rewards = [-1, 1]
+            dones = [True, True]
+
+        if p2_hit:
+            rewards = [1, -1]
+            dones = [True, True]
+
+        if self.remaining_time <= 0:
+            dones = [True, True]
+            rewards = [0, 0]
+
+        dones = {0: dones[0], 1: dones[1]}
+        rewards = {0: rewards[0], 1: rewards[1]}
+        truncations = {0: dones[0], 1: dones[1]}
+        infos = {0: {}, 1: {}}
+
+        if any(dones.values()):
+            self.agents = []
+
+        return observations, rewards, dones, truncations, infos
+
+    def get_obs(self):
+        fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
+
+
         observations = {0: (self.horizontal_walls, self.vertical_walls,
                             [self.p1_x, self.p1_y, self.p1_v, self.p1_direction],
                             [self.p2_x, self.p2_y, self.p2_v, self.p2_direction],
@@ -545,34 +585,7 @@ class TankTrouble(ParallelEnv):
                             [0 if i >= len(self.p1_balls) else 1 if self.p1_balls[i].life > 0 else 0 for i in range(self.max_balls)],
                             )}
 
-
-        self.remaining_time -= 1
-
-        p1_hit = any([self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p2_balls + self.p1_balls])
-        p2_hit = any([self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p1_balls + self.p2_balls])
-
-        if p1_hit and p2_hit:
-            rewards = [0, 0]
-            dones = [True, True]
-
-        if p1_hit:
-            rewards = [-1, 1]
-            dones = [True, True]
-
-        if p2_hit:
-            rewards = [1, -1]
-            dones = [True, True]
-
-        if self.remaining_time <= 0:
-            dones = [True, True]
-            rewards = [0, 0]
-
-        dones = {0: dones[0], 1: dones[1]}
-        rewards = {0: rewards[0], 1: rewards[1]}
-        truncations = {0: False, 1: False}
-        infos = {0: {}, 1: {}}
-
-        return observations, rewards, dones, truncations, infos
+        return observations
 
     def render(self):
         pass
