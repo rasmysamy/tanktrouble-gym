@@ -1,5 +1,6 @@
 import math
 
+import gymnasium.spaces.utils
 from pettingzoo import ParallelEnv
 
 import functools
@@ -31,7 +32,7 @@ class TankTrouble(ParallelEnv):
     }
 
     def __init__(self, s_x=8, s_y=5):
-        self.agents = [0, 1]
+        self.agents = ["0", "1"]
         self.tank_length = 0.5
         self.tank_width = 0.3
         self.tank_speed = 0.05
@@ -44,7 +45,7 @@ class TankTrouble(ParallelEnv):
         self.p1_direction = None
         self.p2_direction = None
         self.remaining_time = 10000
-        self.possible_agents = [0, 1]
+        self.possible_agents = ["0", "1"]
         self.ball_speed = self.tank_speed*2
         self.max_speed = 5.0
         self.p_wall = 0.4
@@ -55,17 +56,17 @@ class TankTrouble(ParallelEnv):
         self.p1_v = 0.0
         self.p2_v = 0.0
 
-        self.agent_name_mapping = {0: "p1", 1: "p2"}
+        self.agent_name_mapping = {"0": "p1", "1": "p2"}
         self.max_balls = 5
         self.p1_balls = [Ball() for _ in range(self.max_balls)]
         self.p2_balls = [Ball() for _ in range(self.max_balls)]
         self.horizontal_walls = [[_ for _ in range(self.size_y + 1)] for _ in range(self.size_x)]
         self.vertical_walls = [[_ for _ in range(self.size_y)] for _ in range(self.size_x + 1)]
-        self.action_spaces = [None, None]
-        self.observation_spaces = [None, None]
-        self.action_spaces[0] = MultiBinary(5)
-        self.action_spaces[1] = MultiBinary(5)
-        self.observation_spaces[0] = Tuple(
+        self.action_spaces = dict()
+        self.observation_spaces = dict()
+        self.action_spaces["0"] = MultiBinary(5)
+        self.action_spaces["1"] = MultiBinary(5)
+        self.observation_spaces["0"] = Tuple(
             [MultiBinary([self.size_x + 1, self.size_y+1]), MultiBinary([self.size_x+1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
@@ -78,7 +79,7 @@ class TankTrouble(ParallelEnv):
              MultiBinary([self.max_balls]),  # own balls valid
              MultiBinary([self.max_balls]),  # other balls valid
              Box(low=0, high=self.remaining_time, shape=(1,))])
-        self.observation_spaces[1] = Tuple(
+        self.observation_spaces["1"] = Tuple(
             [MultiBinary([self.size_x + 1, self.size_y+1]), MultiBinary([self.size_x+1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
@@ -151,7 +152,7 @@ class TankTrouble(ParallelEnv):
         self.remaining_time = 1000
         self.p1_balls = [Ball() for _ in range(self.max_balls)]
         self.p2_balls = [Ball() for _ in range(self.max_balls)]
-        self.agents = [0, 1]
+        self.agents = ["0", "1"]
 
         while True:
             self.horizontal_walls = [[random.random() - (1 if idx in [0, self.size_y] else 0) < self.p_wall for idx in
@@ -165,7 +166,7 @@ class TankTrouble(ParallelEnv):
                 break
 
         print("reset")
-        return self.get_obs(), {0: {}, 1: {}}
+        return self.get_obs(), {"0": {}, "1": {}}
 
     def display_state(self, show=True):
         # we draw the state using matplotlib
@@ -408,8 +409,8 @@ class TankTrouble(ParallelEnv):
         acc_time = 15
 
         # we get the actions from the agents
-        p1_action = actions[0]
-        p2_action = actions[1]
+        p1_action = actions["0"]
+        p2_action = actions["1"]
 
         p1_original_x = self.p1_x
         p1_original_y = self.p1_y
@@ -508,9 +509,9 @@ class TankTrouble(ParallelEnv):
 
         observations = [None, None]
         rewards = [0, 0]
-        dones = [False, False]
-        truncations = [False, False]
-        infos = [None, None]
+        dones = {"0": False, "1": False}
+        truncations = dict()
+        infos = {"0": {}, "1": {}}
         fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
 
 
@@ -524,24 +525,24 @@ class TankTrouble(ParallelEnv):
 
         if p1_hit and p2_hit:
             rewards = [0, 0]
-            dones = [True, True]
+            dones = {"0": True, "1": True}
 
         if p1_hit:
             rewards = [-1, 1]
-            dones = [True, True]
+            dones = {"0": True, "1": True}
 
         if p2_hit:
             rewards = [1, -1]
-            dones = [True, True]
+            dones = {"0": True, "1": True}
 
         if self.remaining_time <= 0:
-            dones = [True, True]
+            dones = {"0": True, "1": True}
             rewards = [0, 0]
 
-        dones = {0: dones[0], 1: dones[1]}
-        rewards = {0: rewards[0], 1: rewards[1]}
-        truncations = {0: dones[0], 1: dones[1]}
-        infos = {0: {}, 1: {}}
+        dones = {"0": dones["0"], "1": dones["1"]}
+        rewards = {"0": rewards[0], "1": rewards[0]}
+        truncations = {"0": dones["0"], "1": dones["1"]}
+        infos = {"0": {}, "1": {}}
 
         if any(dones.values()):
             self.agents = []
@@ -552,7 +553,7 @@ class TankTrouble(ParallelEnv):
         fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
 
 
-        observations = {0: (self.horizontal_walls, self.vertical_walls,
+        observations = {"0": { "observation" : gymnasium.spaces.utils.flatten(self.observation_spaces["0"], (self.horizontal_walls, self.vertical_walls,
                             [self.p1_x, self.p1_y, self.p1_v, self.p1_direction],
                             [self.p2_x, self.p2_y, self.p2_v, self.p2_direction],
                             fill([ball.x for ball in self.p1_balls], self.max_balls),
@@ -567,8 +568,10 @@ class TankTrouble(ParallelEnv):
                             fill([ball.life for ball in self.p2_balls], self.max_balls),
                             [0 if i >= len(self.p1_balls) else 1 if self.p1_balls[i].life > 0 else 0 for i in range(self.max_balls)],
                             [0 if i >= len(self.p2_balls) else 1 if self.p2_balls[i].life > 0 else 0 for i in range(self.max_balls)],
-                            [self.remaining_time]),
-                        1: (self.horizontal_walls, self.vertical_walls,
+                            [self.remaining_time])),
+                            "action_mask" : gymnasium.spaces.utils.flatten(self.action_spaces["0"], [1, 1, 1, 1, 1]),
+                            },
+                        "1": {"observation" : gymnasium.spaces.utils.flatten(self.observation_spaces["1"], (self.horizontal_walls, self.vertical_walls,
                             [self.p2_x, self.p2_y, self.p2_v, self.p2_direction],
                             [self.p1_x, self.p1_y, self.p1_v, self.p1_direction],
                             fill([ball.x for ball in self.p2_balls], self.max_balls),
@@ -583,12 +586,14 @@ class TankTrouble(ParallelEnv):
                             fill([ball.life for ball in self.p1_balls], self.max_balls),
                             [0 if i >= len(self.p2_balls) else 1 if self.p2_balls[i].life > 0 else 0 for i in range(self.max_balls)],
                             [0 if i >= len(self.p1_balls) else 1 if self.p1_balls[i].life > 0 else 0 for i in range(self.max_balls)],
-                            )}
+                            )),
+                            "action_mask" : gymnasium.spaces.utils.flatten(self.action_spaces["1"], [1, 1, 1, 1, 1]),}
+                        }
 
         return observations
 
     def render(self):
-        pass
+        self.display_state()
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]

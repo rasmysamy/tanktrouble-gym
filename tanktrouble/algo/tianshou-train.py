@@ -8,19 +8,22 @@ Requirements:
 pettingzoo == 1.22.0
 git+https://github.com/thu-ml/tianshou
 """
-
+from pettingzoo.utils import parallel_to_aec
 from tianshou.data import Collector
 from tianshou.env import DummyVectorEnv, PettingZooEnv
 from tianshou.policy import MultiAgentPolicyManager, RandomPolicy
+
+from tanktrouble.env import tanktrouble_env as tanktrouble
+from supersuit import flatten_v0
 
 from pettingzoo.classic import rps_v2
 
 if __name__ == "__main__":
     # Step 1: Load the PettingZoo environment
-    env = rps_v2.env(render_mode="human")
+    env = tanktrouble.TankTrouble()
 
     # Step 2: Wrap the environment for Tianshou interfacing
-    env = PettingZooEnv(env)
+    env = PettingZooEnv(parallel_to_aec(env))
 
     # Step 3: Define policies for each agent
     policies = MultiAgentPolicyManager([RandomPolicy(), RandomPolicy()], env)

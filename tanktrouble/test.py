@@ -1,6 +1,7 @@
-import env.tanktrouble_env as tanktrouble
+
 from pynput import keyboard
 import matplotlib.pyplot as plt
+import env.tanktrouble_env as tanktrouble
 
 pressed = {'w': False, 's': False, 'a': False, 'd': False, 'up': False, 'down': False, 'left': False, 'right': False, 'fire': False}
 
@@ -42,12 +43,17 @@ while True:
 
     # print(actions_1)
 
-    observations, rewards, terminations, truncations, infos = env.step({0: actions_1, 1: [False, False, False, False, False]})
+    observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": [False, False, False, False, False]})
 
-    print(terminations)
+    print(type(observations))
+    print(observations)
+
+    # print(terminations)
 
     if any(terminations.values()):
         env.reset()
+
+    sleep(1)
 
     # print(env.p1_x)
     # print(env.p1_y)
