@@ -96,6 +96,8 @@ class TankTrouble(ParallelEnv):
              MultiBinary([self.max_balls]),  # own balls valid
              MultiBinary([self.max_balls]),  # other balls valid
              Box(low=0, high=self.remaining_time, shape=(1,))])
+        self.observation_shape = gymnasium.spaces.flatdim(self.observation_spaces["0"])
+        self.action_shape = gymnasium.spaces.flatdim(self.action_spaces["0"])
 
     def num_agents(self) -> int:
         return 2
