@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Tuple, MultiBinary
 
-
+env_id = 0
 class Ball:
     def __init__(self, x=-100.0, y=-100.0, vx=-100.0, vy=-100.0, life=-1):
         self.x = x
@@ -32,6 +32,9 @@ class TankTrouble(ParallelEnv):
     }
 
     def __init__(self, s_x=8, s_y=5):
+        global env_id
+        self.env_id = env_id
+        env_id += 1
         self.agents = ["0", "1"]
         self.tank_length = 0.5
         self.tank_width = 0.3
@@ -50,6 +53,7 @@ class TankTrouble(ParallelEnv):
         self.max_speed = 5.0
         self.p_wall = 0.4
         self.ball_lifetime = 200
+        self.action_transform = lambda x: x
 
         self.min_start_dist = max(self.size_x, self.size_y) / 1.33
 
@@ -403,14 +407,48 @@ class TankTrouble(ParallelEnv):
         return True
 
 
+    def action_to_onehot(self, action):
+        # we return a onehot encoding of the action
+        # directions cannot oppose each other, so we have -> 3 options there
+        # we can also shoot or not shoot
+        # we can also accelerate or break or neither -> 3 options there
+        acc_idx = {
+            (False, False) : 0,
+            (True, False) : 1,
+            (False, True) : 2,
+            (True, True) : 0
+        }
+        direction_idx = {
+            (False, False): 0,
+            (True, False): 1,
+            (False, True): 2,
+            (True, True): 0
+        }
+        idx = acc_idx[action[0], action[1]] + 3 * direction_idx[action[2], action[3]] + 9 * action[4]
+        return idx
 
+    def onehot_to_action(self, idx):
+        # we return the action corresponding to the onehot encoding
+        acc_idx = idx % 3
+        idx = idx // 3
+        direction_idx = idx % 3
+        idx = idx // 3
+        shoot = idx
+        acc_array = [[False, False], [True, False], [False, True]]
+        direction_array = [[False, False], [True, False], [False, True]]
+        return acc_array + direction_array + [shoot == 1]
 
+    def set_onehot(self, is_onehot=False):
+        if is_onehot:
+            self.action_transform = self.onehot_to_action
+        else:
+            self.action_transform = lambda x: x
     def step(self, actions):
         acc_time = 15
 
         # we get the actions from the agents
-        p1_action = actions["0"]
-        p2_action = actions["1"]
+        p1_action = self.action_transform(actions["0"])
+        p2_action = self.action_transform(actions["1"])
 
         p1_original_x = self.p1_x
         p1_original_y = self.p1_y
@@ -592,8 +630,15 @@ class TankTrouble(ParallelEnv):
 
         return observations
 
-    def render(self):
-        self.display_state()
+    def render(self, framerate=120.0):
+        plt.figure(env_id)
+        plt.ion()
+        plt.show()
+        plt.cla()
+        plt.clf()
+        self.display_state(show=False)
+        plt.draw()
+        plt.pause(1.0 / framerate)
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]

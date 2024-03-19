@@ -8,6 +8,7 @@ Requirements:
 pettingzoo == 1.22.0
 git+https://github.com/thu-ml/tianshou
 """
+from matplotlib import pyplot as plt
 from pettingzoo.utils import parallel_to_aec
 from tianshou.data import Collector
 from tianshou.env import DummyVectorEnv, PettingZooEnv
@@ -19,8 +20,11 @@ from supersuit import flatten_v0
 from pettingzoo.classic import rps_v2
 
 if __name__ == "__main__":
+    plt.ion()
+    plt.show()
     # Step 1: Load the PettingZoo environment
     env = tanktrouble.TankTrouble()
+    env.set_onehot(True)
 
     # Step 2: Wrap the environment for Tianshou interfacing
     env = PettingZooEnv(parallel_to_aec(env))
@@ -34,5 +38,5 @@ if __name__ == "__main__":
     # Step 5: Construct the Collector, which interfaces the policies with the vectorised environment
     collector = Collector(policies, env)
 
-    # Step 6: Execute the environment with the agents playing for 1 episode, and render a frame every 0.1 seconds
-    result = collector.collect(n_episode=1, render=0.1)
+    # Step 6: Execute the environment with the agents playing for 1 episode, and render a frame every 0.1 second
+    result = collector.collect(n_episode=200, render=0.01)
