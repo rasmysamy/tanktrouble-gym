@@ -398,7 +398,7 @@ class TankTrouble(ParallelEnv):
         return True
 
     def ball_step(self, ball, t=0):
-        eps = 0.000001
+        eps = 0.001
         if t >= 1:
             return ball.x, ball.y, ball.vx, ball.vy
         next_x = ball.x + ball.vx
@@ -413,11 +413,11 @@ class TankTrouble(ParallelEnv):
                 if max(abs(ball.x - i), abs(ball.y - j)) > 1:
                     continue
                 if self.horizontal_walls[i][j]:
-                    if self.segment_collision(segment, [i, j, i + 1 + eps, j]):
+                    if self.segment_collision(segment, [i - eps, j, i + 1 + eps, j]):
                         collision_time = (j - ball.y) / ball.vy
                         collisions_h.append((collision_time, i, j))
                 if self.vertical_walls[i][j]:
-                    if self.segment_collision(segment, [i, j, i, j + 1 + eps]):
+                    if self.segment_collision(segment, [i, j - eps, i, j + 1 + eps]):
                         collision_time = (i - ball.x) / ball.vx
                         collisions_v.append((collision_time, i, j))
         collisions_h = sorted(collisions_h, key=lambda x: x[0])
