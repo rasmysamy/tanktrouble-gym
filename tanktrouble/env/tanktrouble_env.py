@@ -394,20 +394,20 @@ class TankTrouble(ParallelEnv):
             return False
         return True
 
-    def ball_step(self, ball, t=0):
-        eps = 0.001
+    def ball_step(self, ball, t=0.0):
+        eps = 0.01
         if t >= 1:
             return ball.x, ball.y, ball.vx, ball.vy
-        next_x = ball.x + ball.vx
-        next_y = ball.y + ball.vy
-        current_x = ball.x + ball.vx * t
-        current_y = ball.y + ball.vy * t
+        next_x = ball.x + (1-t) * ball.vx
+        next_y = ball.y + (1-t) * ball.vy
+        current_x = ball.x
+        current_y = ball.y
         segment = [current_x, current_y, next_x, next_y]
         collisions_h = []
         collisions_v = []
         for i in range(self.size_x + 1):
             for j in range(self.size_y + 1):
-                if max(abs(ball.x - i), abs(ball.y - j)) > 1:
+                if max(abs(ball.x - i), abs(ball.y - j)) > 2:
                     continue
                 if self.horizontal_walls[i][j]:
                     if self.segment_collision(segment, [i - eps, j, i + 1 + eps, j]):
@@ -427,17 +427,17 @@ class TankTrouble(ParallelEnv):
             return next_x, next_y, ball.vx, ball.vy
         if min_t_h < min_t_v:
             # we step to the point of collision, and then we invert the y velocity, and we step again
-            collision_x = ball.x + ball.vx * min_t_h
-            collision_y = collisions_h[0][2]
+            collision_x = ball.x + ball.vx * (min_t_h)
+            collision_y = ball.y + ball.vy * (min_t_h)
             new_vy = -ball.vy
             new_vx = ball.vx
-            return self.ball_step(Ball(collision_x, collision_y + eps, new_vx, new_vy, ball.life), t + min_t_h)
+            return self.ball_step(Ball(collision_x, collision_y + eps*new_vy, new_vx, new_vy, ball.life), t + min_t_h)
         else:
-            collision_x = collisions_v[0][1]
-            collision_y = ball.y + ball.vy * min_t_v
+            collision_x = ball.x + ball.vx * (min_t_v)
+            collision_y = ball.y + ball.vy * (min_t_v)
             new_vx = -ball.vx
             new_vy = ball.vy
-            return self.ball_step(Ball(collision_x + eps, collision_y, new_vx, new_vy, ball.life), t + min_t_v)
+            return self.ball_step(Ball(collision_x + eps * new_vx, collision_y, new_vx, new_vy, ball.life), t + min_t_v)
 
     def player_player_collision(self, p1x, p1y, p1rot, p2x, p2y, p2rot):
         c1, c2, c3, c4 = self.get_player_corners(p1x, p1y, p1rot)
