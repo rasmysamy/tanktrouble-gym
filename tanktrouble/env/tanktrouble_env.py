@@ -148,8 +148,6 @@ class TankTrouble(ParallelEnv):
 
     def reset(self, seed=None, options=None):
         self.agents = copy(self.possible_agents)
-        self.size_x = 8
-        self.size_y = 5
 
         while True:
             self.p1_x = random.randint(0, self.size_x - 1) + 0.5
@@ -180,7 +178,6 @@ class TankTrouble(ParallelEnv):
             if self.is_path(self.p1_x, self.p1_y, self.p2_x, self.p2_y):
                 break
 
-        print("reset")
         return self.get_obs(), {"0": {}, "1": {}}
 
     def display_state(self, show=True):
