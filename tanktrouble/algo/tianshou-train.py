@@ -20,10 +20,9 @@ from supersuit import flatten_v0
 from pettingzoo.classic import rps_v2
 
 if __name__ == "__main__":
-    plt.ion()
-    plt.show()
     # Step 1: Load the PettingZoo environment
     env = tanktrouble.TankTrouble()
+    env.reset()
     env.set_onehot(True)
 
     # Step 2: Wrap the environment for Tianshou interfacing
