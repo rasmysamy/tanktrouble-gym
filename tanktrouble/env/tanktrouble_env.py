@@ -398,7 +398,7 @@ class TankTrouble(ParallelEnv):
         return True
 
     def ball_step(self, ball, t=0):
-        eps = 0.00000001
+        eps = 0.000001
         if t >= 1:
             return ball.x, ball.y, ball.vx, ball.vy
         next_x = ball.x + ball.vx
@@ -413,11 +413,11 @@ class TankTrouble(ParallelEnv):
                 if max(abs(ball.x - i), abs(ball.y - j)) > 1:
                     continue
                 if self.horizontal_walls[i][j]:
-                    if self.segment_collision(segment, [i, j, i + 1, j]):
+                    if self.segment_collision(segment, [i, j, i + 1 + eps, j]):
                         collision_time = (j - ball.y) / ball.vy
                         collisions_h.append((collision_time, i, j))
                 if self.vertical_walls[i][j]:
-                    if self.segment_collision(segment, [i, j, i, j + 1]):
+                    if self.segment_collision(segment, [i, j, i, j + 1 + eps]):
                         collision_time = (i - ball.x) / ball.vx
                         collisions_v.append((collision_time, i, j))
         collisions_h = sorted(collisions_h, key=lambda x: x[0])
@@ -426,7 +426,7 @@ class TankTrouble(ParallelEnv):
             return next_x, next_y, ball.vx, ball.vy
         min_t_h = 10000000 if len(collisions_h) == 0 else collisions_h[0][0]
         min_t_v = 10000000 if len(collisions_v) == 0 else collisions_v[0][0]
-        if min(min_t_h, min_t_v) + t > 1:
+        if min(min_t_h, min_t_v) + t > 1+eps:
             return next_x, next_y, ball.vx, ball.vy
         if min_t_h < min_t_v:
             # we step to the point of collision, and then we invert the y velocity, and we step again
@@ -742,7 +742,7 @@ class TankTrouble(ParallelEnv):
                                                                              [0 if i >= len(self.p1_balls) else 1 if
                                                                              self.p1_balls[i].life > 0 else 0 for i in
                                                                               range(self.max_balls)],
-                                                                             )),
+                                                                             [self.remaining_time])),
                               "action_mask": gymnasium.spaces.utils.flatten(self.action_spaces["1"], [1, 1, 1, 1, 1]), }
                         }
 
