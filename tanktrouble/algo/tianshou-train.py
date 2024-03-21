@@ -8,6 +8,7 @@ Requirements:
 pettingzoo == 1.22.0
 git+https://github.com/thu-ml/tianshou
 """
+import tianshou
 from matplotlib import pyplot as plt
 from pettingzoo.utils import parallel_to_aec
 from tianshou.data import Collector
@@ -83,13 +84,13 @@ def _get_agents(
         # model
         net = Net(
             state_shape=gymnasium.spaces.utils.flatdim(observation_space),
-            action_shape=(gymnasium.spaces.utils.flatdim(env.action_space)),
+            action_shape=gymnasium.spaces.utils.flatdim(env.action_space),
             hidden_sizes=[256,64,64,64],
             device="cuda" if torch.cuda.is_available() else "cpu",
             num_atoms=51,
         ).to("cuda" if torch.cuda.is_available() else "cpu")
         if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1e-4)
+            optim = torch.optim.Adam(net.parameters(), lr=0.0000625)
         # agent_learn = DQNPolicy(
         #     model=net,
         #     optim=optim,
@@ -97,10 +98,24 @@ def _get_agents(
         #     estimation_step=3,
         #     target_update_freq=3200,
         # )
-        agent_learn = RainbowPolicy(model=net, optim=optim).to("cuda" if torch.cuda.is_available() else "cpu")
+        agent_learn = RainbowPolicy(model=net, optim=optim, estimation_step=10, target_update_freq=32_000).to("cuda" if torch.cuda.is_available() else "cpu")
+
+    from tianshou.data import Batch
+
+    def do_nothing(
+        self,
+        batch: Batch,
+        state = None,
+        **kwargs,
+    ) -> Batch:
+        mask = batch.obs.mask
+        logits = np.random.rand(*mask.shape)
+        logits[~mask] = -np.inf
+        return Batch(act=np.zeros_like(logits.argmax(axis=-1)))
 
     if agent_opponent is None:
         agent_opponent = RandomPolicy()
+        agent_opponent.forward = lambda *args, **kwargs: do_nothing(agent_opponent, *args, **kwargs)
 
     agents = [agent_opponent, agent_learn]
     policy = MultiAgentPolicyManager(agents, env)
@@ -162,11 +177,11 @@ if __name__ == "__main__":
         return False
 
     def train_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.03)
+        policy.policies[agents[1]].set_eps(0.05)
 
     def test_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.00)
-        if epoch%1 == 0:
+        policy.policies[agents[1]].set_eps(0.01)
+        if epoch%5 == 0:
             test_collector.collect = test_collector.collect___r
         else:
             test_collector.collect = test_collector.collect___b
@@ -180,7 +195,7 @@ if __name__ == "__main__":
         train_collector=train_collector,
         test_collector=test_collector,
         max_epoch=50000,
-        step_per_epoch=1000,
+        step_per_epoch=10_000,
         step_per_collect=1000,
         episode_per_test=10,
         batch_size=64,
