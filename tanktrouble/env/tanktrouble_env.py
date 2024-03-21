@@ -13,6 +13,7 @@ from math import sqrt
 import matplotlib.pyplot as plt
 
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Tuple, MultiBinary
+import numpy as np
 
 env_id = 0
 
@@ -35,8 +36,11 @@ class TankTrouble(ParallelEnv):
     }
 
     def __init__(self, s_x=8, s_y=5):
+        self.seen_cells = {"0": set(), "1": set()}
+        self.always_render = False
         self.pygame_scene = pygame.Surface((640, 480))
         self.scale = lambda x: [x[0]/self.size_x * 640, (1 - x[1]/self.size_y) * 480]
+        self.mask = np.ones(5, dtype=bool)
 
         self.draw_line = lambda p1, p2, color: pygame.draw.line(self.pygame_scene, color, self.scale((p1[0], p1[1])), self.scale((p2[0], p2[1])), 3)
         self.draw_circle = lambda p, color: pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
@@ -62,6 +66,7 @@ class TankTrouble(ParallelEnv):
         self.p_wall = 0.4
         self.ball_lifetime = 200
         self.action_transform = lambda x: x
+        self.action_untransform = lambda x: x
 
         self.min_start_dist = max(self.size_x, self.size_y) / 1.33
 
@@ -147,6 +152,7 @@ class TankTrouble(ParallelEnv):
         return False
 
     def reset(self, seed=None, options=None):
+        self.seen_cells = {"0": set(), "1": set()}
         self.agents = copy(self.possible_agents)
 
         while True:
@@ -493,6 +499,9 @@ class TankTrouble(ParallelEnv):
         return idx
 
     def onehot_to_action(self, idx):
+        # if array, get argmax
+        if type(idx) in (list, np.ndarray, tuple):
+            idx = np.argmax(np.array(np.array(idx)))
         # we return the action corresponding to the onehot encoding
         acc_idx = idx % 3
         idx = idx // 3
@@ -501,13 +510,24 @@ class TankTrouble(ParallelEnv):
         shoot = idx
         acc_array = [[False, False], [True, False], [False, True]]
         direction_array = [[False, False], [True, False], [False, True]]
-        return acc_array + direction_array + [shoot == 1]
+        return acc_array[acc_idx] + direction_array[direction_idx] + [shoot == 1]
+
 
     def set_onehot(self, is_onehot=False):
         if is_onehot:
             self.action_transform = self.onehot_to_action
+            self.action_untransform = self.action_to_onehot
+            self.action_spaces["0"] = Discrete(18)
+            self.action_spaces["1"] = Discrete(18)
+            self.action_shape = gymnasium.spaces.flatdim(self.action_spaces["0"])
+            self.mask = np.ones(18, dtype=bool)
         else:
             self.action_transform = lambda x: x
+            self.action_untransform = lambda x: x
+            self.action_spaces["0"] = MultiBinary(5)
+            self.action_spaces["1"] = MultiBinary(5)
+            self.action_shape = gymnasium.spaces.flatdim(self.action_spaces["0"])
+            self.mask = np.ones(5, dtype=bool)
 
     def step(self, actions):
         acc_time = 15
@@ -515,6 +535,7 @@ class TankTrouble(ParallelEnv):
         # we get the actions from the agents
         p1_action = self.action_transform(actions["0"])
         p2_action = self.action_transform(actions["1"])
+
 
         p1_original_x = self.p1_x
         p1_original_y = self.p1_y
@@ -648,25 +669,44 @@ class TankTrouble(ParallelEnv):
             dones = {"0": True, "1": True}
 
         if p1_hit:
+            is_sucide = any([self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p1_balls])
             rewards = [-1, 1]
+            # if is_sucide:
+                # rewards = [-10, 0.3]
             dones = {"0": True, "1": True}
 
         if p2_hit:
+            is_sucide = any([self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p2_balls])
             rewards = [1, -1]
+            # if is_sucide:
+                # rewards = [0.3, -10]
             dones = {"0": True, "1": True}
 
         if self.remaining_time <= 0:
             dones = {"0": True, "1": True}
             rewards = [0, 0]
 
+        if (int(self.p1_x), int(self.p1_y)) not in self.seen_cells["0"]:
+            self.seen_cells["0"].add((int(self.p1_x), int(self.p1_y)))
+            rewards[0] += 0.1
+
+        if (int(self.p2_x), int(self.p2_y)) not in self.seen_cells["1"]:
+            self.seen_cells["1"].add((int(self.p2_x), int(self.p2_y)))
+            rewards[1] += 0.1
+
+
         dones = {"0": dones["0"], "1": dones["1"]}
-        rewards = {"0": rewards[0], "1": rewards[0]}
+        rewards = {"0": rewards[0], "1": rewards[1]}
         truncations = {"0": dones["0"], "1": dones["1"]}
         infos = {"0": {}, "1": {}}
 
         if any(dones.values()):
             self.agents = []
 
+        if self.always_render: self.pygame_render()
+
+        # print("Step: ", self.remaining_time, "agents: ", self.agents, "P1: ", self.p1_x, self.p1_y, "P2: ", self.p2_x, self.p2_y, "Rewards: ", rewards, "Dones: ", dones, "Truncations: ", truncations, "Infos: ", infos)
+        # print("Actions: ", actions)
         return observations, rewards, dones, truncations, infos
 
     def get_obs(self):
@@ -705,7 +745,7 @@ class TankTrouble(ParallelEnv):
                                                                              self.p2_balls[i].life > 0 else 0 for i in
                                                                               range(self.max_balls)],
                                                                              [self.remaining_time])),
-                              "action_mask": gymnasium.spaces.utils.flatten(self.action_spaces["0"], [1, 1, 1, 1, 1]),
+                              "action_mask": self.mask,
                               },
                         "1": {"observation": gymnasium.spaces.utils.flatten(self.observation_spaces["1"],
                                                                             (self.horizontal_walls, self.vertical_walls,
@@ -740,20 +780,12 @@ class TankTrouble(ParallelEnv):
                                                                              self.p1_balls[i].life > 0 else 0 for i in
                                                                               range(self.max_balls)],
                                                                              [self.remaining_time])),
-                              "action_mask": gymnasium.spaces.utils.flatten(self.action_spaces["1"], [1, 1, 1, 1, 1]), }
+                              "action_mask": self.mask, }
                         }
 
         return observations
 
     def render(self, framerate=120.0):
-        # plt.figure(env_id)
-        # plt.ion()
-        # plt.show()
-        # plt.cla()
-        # plt.clf()
-        # self.display_state(show=False)
-        # plt.draw()
-        # plt.pause(1.0 / framerate)
         self.pygame_render()
 
     def observation_space(self, agent):
