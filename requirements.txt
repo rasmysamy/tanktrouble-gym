@@ -1,5 +1,5 @@
 pettingzoo==1.24.3
 packaging==21.3
-tianshou==0.5.1
+tianshou==1.0.0
 supersuit
 pygame

@@ -688,11 +688,11 @@ class TankTrouble(ParallelEnv):
 
         if (int(self.p1_x), int(self.p1_y)) not in self.seen_cells["0"]:
             self.seen_cells["0"].add((int(self.p1_x), int(self.p1_y)))
-            rewards[0] += 0.1
+            rewards[0] += 0.01
 
         if (int(self.p2_x), int(self.p2_y)) not in self.seen_cells["1"]:
             self.seen_cells["1"].add((int(self.p2_x), int(self.p2_y)))
-            rewards[1] += 0.1
+            rewards[1] += 0.01
 
 
         dones = {"0": dones["0"], "1": dones["1"]}
