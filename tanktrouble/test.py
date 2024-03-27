@@ -57,7 +57,9 @@ env.reset()
 
 env2 = env.copy()
 
-env3 = deepcopy(env)
+env3 = deepcopy(env2)
+
+env = env3
 
 frame_rate = 60
 
@@ -100,8 +102,8 @@ def loop():
     # print(env.p1_direction)
 
 
-print(timeit.timeit(loop, number=100_00), "seconds")
-exit(0)
+# print(timeit.timeit(loop, number=100_00), "seconds")
+# exit(0)
 
 while True:
     # use timeit to benchmark loop

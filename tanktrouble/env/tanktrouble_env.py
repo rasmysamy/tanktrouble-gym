@@ -35,15 +35,20 @@ class TankTrouble(ParallelEnv):
         "name": "tanktrouble_v0",
     }
 
+    def draw_line(self, p1, p2, color):
+        pygame.draw.line(self.pygame_scene, color, self.scale((p1[0], p1[1])), self.scale((p2[0], p2[1])), 3)
+
+    def draw_circle(self, p, color):
+        pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
     def __init__(self, s_x=8, s_y=5):
         self.seen_cells = {"0": set(), "1": set()}
         self.always_render = False
-        self.pygame_scene = pygame.Surface((640, 480))
+        self.pygame_scene = None
         self.scale = lambda x: [x[0]/self.size_x * 640, (1 - x[1]/self.size_y) * 480]
         self.mask = np.ones(5, dtype=bool)
 
-        self.draw_line = lambda p1, p2, color: pygame.draw.line(self.pygame_scene, color, self.scale((p1[0], p1[1])), self.scale((p2[0], p2[1])), 3)
-        self.draw_circle = lambda p, color: pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
+        # self.draw_line = lambda p1, p2, color: pygame.draw.line(self.pygame_scene, color, self.scale((p1[0], p1[1])), self.scale((p2[0], p2[1])), 3)
+        # self.draw_circle = lambda p, color: pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
         global env_id
         self.env_id = env_id
         env_id += 1
@@ -221,12 +226,23 @@ class TankTrouble(ParallelEnv):
     def copy(self):
         surf = self.pygame_scene
         self.pygame_scene = None
+        self.__deepcopy___ = self.__deepcopy__
+        self.__deepcopy__ = None
         cp = deepcopy(self)
+        self.__deepcopy__ = self.__deepcopy___
+        cp.__deepcopy__ = cp.__deepcopy___
         self.pygame_scene = surf
         cp.pygame_scene = pygame.Surface((640, 480))
         return cp
 
+    def __deepcopy__(self, memodict={}):
+        cp = self.copy()
+        memodict[id(self)] = cp
+        return cp
+
     def pygame_render(self):
+        if self.pygame_scene is None:
+            self.pygame_scene = pygame.Surface((640, 480))
         # we do it in pygame instead of matplotlib
         self.pygame_scene.fill((255, 255, 255))
         self.draw_tank_pygame(self.p1_x, self.p1_y, self.p1_direction, (255, 0, 0))
