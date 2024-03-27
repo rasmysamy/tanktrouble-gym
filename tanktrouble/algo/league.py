@@ -10,12 +10,16 @@ class LeaguePolicy(BasePolicy):
         super().__init__(action_space=action_space)
         self.policy_list = policy_list
         self.max_agents = max_agents
+        self.idx = 0
+
+    def update_idx(self):
+        self.idx = np.random.randint(0, len(self.policy_list))
 
     def forward(self, batch, state=dict(), **kwargs):
         if len(self.policy_list) == 0:
             raise ValueError("No policies in the queue")
         # choose a random agent from the list
-        ag_idx = np.random.randint(0, len(self.policy_list))
+        ag_idx = self.idx % len(self.policy_list)
         action = self.policy_list[ag_idx].forward(batch, state, **kwargs)
         return action
 

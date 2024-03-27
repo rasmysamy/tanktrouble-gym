@@ -7,7 +7,7 @@ from pettingzoo import ParallelEnv
 import functools
 import random
 
-from copy import copy
+from copy import copy, deepcopy
 from math import sqrt
 
 import matplotlib.pyplot as plt
@@ -217,6 +217,14 @@ class TankTrouble(ParallelEnv):
             plt.draw()
             plt.pause(1.0 / 30.0)
             plt.show()
+
+    def copy(self):
+        surf = self.pygame_scene
+        self.pygame_scene = None
+        cp = deepcopy(self)
+        self.pygame_scene = surf
+        cp.pygame_scene = pygame.Surface((640, 480))
+        return cp
 
     def pygame_render(self):
         # we do it in pygame instead of matplotlib

@@ -1,5 +1,6 @@
 import time
 import timeit
+from copy import deepcopy
 from time import sleep
 
 from pynput import keyboard
@@ -53,6 +54,10 @@ listener.start()
 
 env = tanktrouble.TankTrouble()
 env.reset()
+
+env2 = env.copy()
+
+env3 = deepcopy(env)
 
 frame_rate = 60
 

@@ -32,7 +32,7 @@ from league import LeaguePolicy
 
 from pettingzoo.classic import tictactoe_v3
 
-is_distrib = False
+is_distrib = True
 
 
 def _get_agents(
@@ -47,7 +47,7 @@ def _get_agents(
         if isinstance(env.observation_space, gymnasium.spaces.Dict)
         else env.observation_space
     )
-    hidden_sizes = [256, 512, 128]
+    hidden_sizes = [4096, 4096, 4096]
     if agent_learn is None:
         # model
         net = Net(
@@ -66,7 +66,7 @@ def _get_agents(
         ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if optim is None:
-            optim = torch.optim.Adam(net.parameters(), lr=1.5e-4)
+            optim = torch.optim.Adam(net.parameters(), lr=1e-4)
             optim_fixed = torch.optim.SGD(net_fixed.parameters(), lr=0.0)
         if not is_distrib:
             agent_learn = DQNPolicy(
@@ -88,10 +88,10 @@ def _get_agents(
                 is_double=True,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         if is_distrib:
-            agent_learn = RainbowPolicy(model=net, optim=optim, action_space=env.action_space, estimation_step=5,
+            agent_learn = RainbowPolicy(model=net, optim=optim, action_space=env.action_space, estimation_step=10,
                                         target_update_freq=5000).to("cuda" if torch.cuda.is_available() else "cpu")
             agent_fixed = RainbowPolicy(model=net_fixed, optim=optim_fixed, action_space=env.action_space,
-                                        estimation_step=5, target_update_freq=5000).to(
+                                        estimation_step=10, target_update_freq=5000).to(
                 "cuda" if torch.cuda.is_available() else "cpu")
 
     from tianshou.data import Batch
@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
 
     train_envs = DummyVectorEnv([_get_env for _ in range(10)])
-    test_envs = DummyVectorEnv([_get_env for _ in range(10)])
+    test_envs = DummyVectorEnv([_get_env for _ in range(1)])
 
     # seed
     seed = 1
@@ -183,6 +183,20 @@ if __name__ == "__main__":
     test_collector = Collector(policy, test_envs, exploration_noise=True)
     # policy.set_eps(1)
     train_collector.collect(n_step=64 * 10)  # batch size * training_num
+    def update_league_and_forward(self, fun, *args, **kwargs):
+        for pol in self.policy.policies.values():
+            if hasattr(pol, "update_idx"):
+                pol.update_idx()
+        fun(*args, **kwargs)
+    test_collector.reset_env__ = test_collector.reset_env
+    test_collector._reset_env_with_ids__ = test_collector._reset_env_with_ids
+    test_collector.reset_env = lambda *args, **kwargs: update_league_and_forward(test_collector, test_collector.reset_env__, *args, **kwargs)
+    test_collector._reset_env_with_ids = lambda *args, **kwargs: update_league_and_forward(test_collector, test_collector._reset_env_with_ids__, *args, **kwargs)
+
+    # train_collector.reset_env__ = train_collector.reset_env
+    # train_collector._reset_env_with_ids__ = train_collector._reset_env_with_ids
+    # train_collector.reset_env = lambda *args, **kwargs: update_league_and_forward(train_collector, train_collector.reset_env__, *args, **kwargs)
+    # train_collector._reset_env_with_ids = lambda *args, **kwargs: update_league_and_forward(test_collector, train_collector._reset_env_with_ids__, *args, **kwargs)
 
 
     def override_kwargs_and_forward(fun, *args, **kwargs):
@@ -194,8 +208,8 @@ if __name__ == "__main__":
     # test_collector.collect___r = lambda *args, **kwargs: override_kwargs_and_forward(test_collector.collect___b, *args, **kwargs)
     # test_collector.collect = test_collector.collect___r
 
-    thresh_win_rate = 0.55
-    thresh_in_a_row = 3
+    thresh_win_rate = 0.7
+    thresh_in_a_row = 10
     in_a_row = 0
     wins = 0
     losses = 0
@@ -237,6 +251,7 @@ if __name__ == "__main__":
     def train_fn(epoch, env_step):
         global wins, draws, losses
         policy.policies[agents[1]].set_eps(0.01)
+        policy.policies[agents[0]].update_idx()
         policy.policies[agents[0]].set_eps(0.01)
 
 
@@ -260,11 +275,11 @@ if __name__ == "__main__":
             policy=policy,
             train_collector=train_collector,
             test_collector=test_collector,
-            max_epoch=400,
+            max_epoch=4000,
             step_per_epoch=10_000,
-            step_per_collect=1000,
-            episode_per_test=1,
-            batch_size=1024,
+            step_per_collect=100,
+            episode_per_test=8,
+            batch_size=32,
             train_fn=train_fn,
             test_fn=test_fn,
             stop_fn=stop_fn,
@@ -273,9 +288,15 @@ if __name__ == "__main__":
             test_in_train=False,
             reward_metric=reward_metric,
         ).run()
+        wins = 0
+        losses = 0
+        draws = 0
+        in_a_row = 0
         agent_copy = copy.copy(policy.policies[agents[1]])
         agent_copy.load_state_dict(policy.policies[agents[1]].state_dict().copy())
         policy.policies[agents[0]].push_agent(agent_copy, rotate=True)
+
+        print(f"Generation {i + 1}/{gen_count} complete")
         # policy.policies[agents[0]].load_state_dict(policy.policies[agents[1]].state_dict().copy())
 
     # return result, policy.policies[agents[1]]
