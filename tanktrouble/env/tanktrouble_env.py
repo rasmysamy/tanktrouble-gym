@@ -6,6 +6,8 @@ from pettingzoo import ParallelEnv
 
 import functools
 import random
+import jax
+import chex
 
 from copy import copy, deepcopy
 from math import sqrt
@@ -17,6 +19,7 @@ import numpy as np
 
 env_id = 0
 
+fixed_walls = True
 
 class Ball:
     def __init__(self, x=-100.0, y=-100.0, vx=-100.0, vy=-100.0, life=-1):
@@ -30,6 +33,20 @@ class Ball:
         return self.x, self.y, self.vx, self.vy
 
 
+# @chex.dataclass
+# class ball:
+#     x: float
+#     y: float
+#     vx: float
+#     vy: float
+#     life: int
+#
+#     def return_state(self):
+#         return self.x, self.y, self.vx, self.vy
+#
+# class player:
+
+
 class TankTrouble(ParallelEnv):
     metadata = {
         "name": "tanktrouble_v0",
@@ -40,15 +57,14 @@ class TankTrouble(ParallelEnv):
 
     def draw_circle(self, p, color):
         pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
+
     def __init__(self, s_x=8, s_y=5):
         self.seen_cells = {"0": set(), "1": set()}
         self.always_render = False
         self.pygame_scene = None
-        self.scale = lambda x: [x[0]/self.size_x * 640, (1 - x[1]/self.size_y) * 480]
+        self.scale = lambda x: [x[0] / self.size_x * 640, (1 - x[1] / self.size_y) * 480]
         self.mask = np.ones(5, dtype=bool)
 
-        # self.draw_line = lambda p1, p2, color: pygame.draw.line(self.pygame_scene, color, self.scale((p1[0], p1[1])), self.scale((p2[0], p2[1])), 3)
-        # self.draw_circle = lambda p, color: pygame.draw.circle(self.pygame_scene, color, self.scale((p[0], p[1])), 5)
         global env_id
         self.env_id = env_id
         env_id += 1
@@ -157,6 +173,7 @@ class TankTrouble(ParallelEnv):
         return False
 
     def reset(self, seed=None, options=None):
+        global fixed_walls
         self.seen_cells = {"0": set(), "1": set()}
         self.agents = copy(self.possible_agents)
 
@@ -178,14 +195,48 @@ class TankTrouble(ParallelEnv):
         self.agents = ["0", "1"]
 
         while True:
-            self.horizontal_walls = [[random.random() - (1 if idx in [0, self.size_y] else 0) < self.p_wall for idx in
-                                      range(self.size_y + 1)] for _ in
-                                     range(self.size_x + 1)]  # outside walls are always there
-            self.vertical_walls = [
-                [random.random() - (1 if idx in [0, self.size_x] else 0) < self.p_wall for _ in range(self.size_y + 1)]
-                for
-                idx in range(self.size_x + 1)]  # outside walls are always there
-            # check if there is a path from p1 to p2
+
+            # self.horizontal_walls = [[random.random() - (1 if idx in [0, self.size_y] else 0) < self.p_wall for idx in
+            #                           range(self.size_y + 1)] for _ in
+            #                          range(self.size_x + 1)]  # outside walls are always there
+            # self.vertical_walls = [
+            #     [random.random() - (1 if idx in [0, self.size_x] else 0) < self.p_wall for _ in range(self.size_y + 1)]
+            #     for
+            #     idx in range(self.size_x + 1)]  # outside walls are always there
+            # # check if there is a path from p1 to p2
+
+            if fixed_walls:
+                self.vertical_walls = [[True, True, True, True, True, True], [True, True, False, False, False, False],
+                                      [True, False, True, True, True, True], [True, True, False, False, True, True],
+                                      [True, False, False, False, False, False], [False, False, True, False, False, True],
+                                      [False, True, True, False, False, False], [False, False, True, False, False, False],
+                                      [True, True, True, True, True, True]]
+                self.horizontal_walls = [[True, True, True, False, False, True], [True, False, False, True, True, True],
+                                        [True, False, False, True, True, True], [True, False, True, False, False, True],
+                                        [True, False, False, False, False, True], [True, False, False, True, True, True],
+                                        [True, False, True, False, True, True], [True, True, False, False, False, True],
+                                        [True, False, True, False, False, True]]
+            else:
+                self.horizontal_walls = [[random.random() - (1 if idx in [0, self.size_y] else 0) < self.p_wall for idx in
+                                          range(self.size_y + 1)] for _ in
+                                         range(self.size_x + 1)]  # outside walls are always there
+                self.vertical_walls = [
+                    [random.random() - (1 if idx in [0, self.size_x] else 0) < self.p_wall for _ in range(self.size_y + 1)]
+                    for
+                    idx in range(self.size_x + 1)]  # outside walls are always there
+                # check if there is a path from p1 to p2
+
+
+
+
+            while True:
+                self.p1_x = random.randint(0, self.size_x - 1) + 0.5
+                self.p1_y = random.randint(0, self.size_y - 1) + 0.5
+                self.p2_x = random.randint(0, self.size_x - 1) + 0.5
+                self.p2_y = random.randint(0, self.size_y - 1) + 0.5
+                if sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2) > self.min_start_dist:
+                    break
+
             if self.is_path(self.p1_x, self.p1_y, self.p2_x, self.p2_y):
                 break
 
@@ -250,13 +301,15 @@ class TankTrouble(ParallelEnv):
         pygame.draw.circle(self.pygame_scene, (255, 0, 0), (int(self.p1_x), int(self.p1_y)), 5)
         pygame.draw.circle(self.pygame_scene, (0, 0, 255), (int(self.p2_x), int(self.p2_y)), 5)
         self.draw_line([self.p1_x, self.p1_y],
-                 [self.p1_x + 0.5 * math.cos(self.p1_direction), self.p1_y + 0.5 * math.sin(self.p1_direction), ], (255, 0, 0))
+                       [self.p1_x + 0.5 * math.cos(self.p1_direction), self.p1_y + 0.5 * math.sin(self.p1_direction), ],
+                       (255, 0, 0))
         self.draw_line([self.p2_x, self.p2_y],
-                 [self.p2_x + 0.5 * math.cos(self.p2_direction), self.p2_y + 0.5 * math.sin(self.p2_direction)], (0, 0, 255))
+                       [self.p2_x + 0.5 * math.cos(self.p2_direction), self.p2_y + 0.5 * math.sin(self.p2_direction)],
+                       (0, 0, 255))
         for i in range(self.size_x):
             for j in range(self.size_y):
                 if self.horizontal_walls[i][j]:
-                    self.draw_line([i, j], [i+1, j], (0, 0, 0))
+                    self.draw_line([i, j], [i + 1, j], (0, 0, 0))
         for i in range(self.size_x):
             for j in range(self.size_y):
                 if self.vertical_walls[i][j]:
@@ -273,8 +326,6 @@ class TankTrouble(ParallelEnv):
             pygame.display.set_mode((640, 480))
         pygame.display.get_surface().blit(self.pygame_scene, (0, 0))
         pygame.display.flip()
-
-
 
     def draw_tank(self, x, y, direction, color):
 
@@ -306,7 +357,8 @@ class TankTrouble(ParallelEnv):
     def draw_tank_pygame(self, x, y, direction, color):
 
         # draw a rectangle at x, y with the direction
-        self.draw_line([x, y], [x + self.tank_length * math.cos(direction), y + self.tank_length * math.sin(direction)], color)
+        self.draw_line([x, y], [x + self.tank_length * math.cos(direction), y + self.tank_length * math.sin(direction)],
+                       color)
 
         px = x
         py = y
@@ -428,8 +480,8 @@ class TankTrouble(ParallelEnv):
         eps = 0.01
         if t >= 1:
             return ball.x, ball.y, ball.vx, ball.vy
-        next_x = ball.x + (1-t) * ball.vx
-        next_y = ball.y + (1-t) * ball.vy
+        next_x = ball.x + (1 - t) * ball.vx
+        next_y = ball.y + (1 - t) * ball.vy
         current_x = ball.x
         current_y = ball.y
         segment = [current_x, current_y, next_x, next_y]
@@ -453,7 +505,7 @@ class TankTrouble(ParallelEnv):
             return next_x, next_y, ball.vx, ball.vy
         min_t_h = 10000000 if len(collisions_h) == 0 else collisions_h[0][0]
         min_t_v = 10000000 if len(collisions_v) == 0 else collisions_v[0][0]
-        if min(min_t_h, min_t_v) + t > 1+eps:
+        if min(min_t_h, min_t_v) + t > 1 + eps:
             return next_x, next_y, ball.vx, ball.vy
         if min_t_h < min_t_v:
             # we step to the point of collision, and then we invert the y velocity, and we step again
@@ -461,7 +513,7 @@ class TankTrouble(ParallelEnv):
             collision_y = ball.y + ball.vy * (min_t_h)
             new_vy = -ball.vy
             new_vx = ball.vx
-            return self.ball_step(Ball(collision_x, collision_y + eps*new_vy, new_vx, new_vy, ball.life), t + min_t_h)
+            return self.ball_step(Ball(collision_x, collision_y + eps * new_vy, new_vx, new_vy, ball.life), t + min_t_h)
         else:
             collision_x = ball.x + ball.vx * (min_t_v)
             collision_y = ball.y + ball.vy * (min_t_v)
@@ -536,7 +588,6 @@ class TankTrouble(ParallelEnv):
         direction_array = [[False, False], [True, False], [False, True]]
         return acc_array[acc_idx] + direction_array[direction_idx] + [shoot == 1]
 
-
     def set_onehot(self, is_onehot=False):
         if is_onehot:
             self.action_transform = self.onehot_to_action
@@ -559,7 +610,6 @@ class TankTrouble(ParallelEnv):
         # we get the actions from the agents
         p1_action = self.action_transform(actions["0"])
         p2_action = self.action_transform(actions["1"])
-
 
         p1_original_x = self.p1_x
         p1_original_y = self.p1_y
@@ -693,17 +743,19 @@ class TankTrouble(ParallelEnv):
             dones = {"0": True, "1": True}
 
         if p1_hit:
-            is_sucide = any([self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p1_balls])
+            is_sucide = any(
+                [self.ball_player_collision(ball, self.p1_x, self.p1_y, self.p1_direction) for ball in self.p1_balls])
             rewards = [-1, 1]
             # if is_sucide:
-                # rewards = [-10, 0.3]
+            # rewards = [-10, 0.3]
             dones = {"0": True, "1": True}
 
         if p2_hit:
-            is_sucide = any([self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p2_balls])
+            is_sucide = any(
+                [self.ball_player_collision(ball, self.p2_x, self.p2_y, self.p2_direction) for ball in self.p2_balls])
             rewards = [1, -1]
             # if is_sucide:
-                # rewards = [0.3, -10]
+            # rewards = [0.3, -10]
             dones = {"0": True, "1": True}
 
         if self.remaining_time <= 0:
@@ -717,7 +769,6 @@ class TankTrouble(ParallelEnv):
         if (int(self.p2_x), int(self.p2_y)) not in self.seen_cells["1"]:
             self.seen_cells["1"].add((int(self.p2_x), int(self.p2_y)))
             rewards[1] += 0.01
-
 
         dones = {"0": dones["0"], "1": dones["1"]}
         rewards = {"0": rewards[0], "1": rewards[1]}
@@ -743,21 +794,21 @@ class TankTrouble(ParallelEnv):
                                                                              [self.p2_x, self.p2_y, self.p2_v,
                                                                               self.p2_direction],
                                                                              [fill([ball.x for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.y for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vx for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vy for ball in self.p1_balls],
-                                                                                  self.max_balls)],
+                                                                                   self.max_balls),
+                                                                              fill([ball.y for ball in self.p1_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vx for ball in self.p1_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vy for ball in self.p1_balls],
+                                                                                   self.max_balls)],
                                                                              [fill([ball.x for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.y for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vx for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vy for ball in self.p2_balls],
-                                                                                  self.max_balls)],
+                                                                                   self.max_balls),
+                                                                              fill([ball.y for ball in self.p2_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vx for ball in self.p2_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vy for ball in self.p2_balls],
+                                                                                   self.max_balls)],
                                                                              fill([ball.life for ball in self.p1_balls],
                                                                                   self.max_balls),
                                                                              fill([ball.life for ball in self.p2_balls],
@@ -778,21 +829,21 @@ class TankTrouble(ParallelEnv):
                                                                              [self.p1_x, self.p1_y, self.p1_v,
                                                                               self.p1_direction],
                                                                              [fill([ball.x for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.y for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vx for ball in self.p2_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vy for ball in self.p2_balls],
-                                                                                  self.max_balls)],
+                                                                                   self.max_balls),
+                                                                              fill([ball.y for ball in self.p2_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vx for ball in self.p2_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vy for ball in self.p2_balls],
+                                                                                   self.max_balls)],
                                                                              [fill([ball.x for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.y for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vx for ball in self.p1_balls],
-                                                                                  self.max_balls),
-                                                                             fill([ball.vy for ball in self.p1_balls],
-                                                                                  self.max_balls)],
+                                                                                   self.max_balls),
+                                                                              fill([ball.y for ball in self.p1_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vx for ball in self.p1_balls],
+                                                                                   self.max_balls),
+                                                                              fill([ball.vy for ball in self.p1_balls],
+                                                                                   self.max_balls)],
                                                                              fill([ball.life for ball in self.p2_balls],
                                                                                   self.max_balls),
                                                                              fill([ball.life for ball in self.p1_balls],

@@ -47,7 +47,7 @@ def _get_agents(
         if isinstance(env.observation_space, gymnasium.spaces.Dict)
         else env.observation_space
     )
-    hidden_sizes = [4096, 4096, 4096]
+    hidden_sizes = [1024, 1024, 1024]
     if agent_learn is None:
         # model
         net = Net(

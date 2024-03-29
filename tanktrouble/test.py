@@ -85,17 +85,26 @@ def loop():
 
     # print(actions_1)
 
-    observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": actions_2})
+    # observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": actions_2})
+
+    print(f"vert walls : {env.vertical_walls}")
+    print(f"horiz walls : {env.horizontal_walls}")
 
     # print(type(observations))
     # print(observations)
 
     # print(terminations)
 
-    if any(terminations.values()):
-        env.reset()
+    # if any(terminations.values()):
+    #     env.reset()
 
     sleep(1.0 / frame_rate)
+
+    while not pressed['enter']:
+        sleep(1.0 / frame_rate)
+        env.pygame_render()
+
+    env.reset()
 
     # print(env.p1_x)
     # print(env.p1_y)
@@ -109,4 +118,3 @@ while True:
     # use timeit to benchmark loop
     loop()
 
-# j = input()
