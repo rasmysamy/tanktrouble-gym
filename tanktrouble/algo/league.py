@@ -1,12 +1,12 @@
 from collections import deque
 
-import gym
+import gymnasium
 import numpy as np
 from tianshou.policy import BasePolicy, TrainingStats
 
 
 class LeaguePolicy(BasePolicy):
-    def __init__(self, policy_list=[], max_agents=10, *, action_space: gym.Space):
+    def __init__(self, policy_list=[], max_agents=10, *, action_space: gymnasium.Space):
         super().__init__(action_space=action_space)
         self.policy_list = policy_list
         self.max_agents = max_agents

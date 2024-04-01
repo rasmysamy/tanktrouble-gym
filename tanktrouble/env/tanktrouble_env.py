@@ -107,7 +107,8 @@ class TankTrouble(ParallelEnv):
         self.action_spaces["0"] = MultiBinary(5)
         self.action_spaces["1"] = MultiBinary(5)
 
-        obs_space_noimg = [MultiBinary([self.size_x + 1, self.size_y + 1]), MultiBinary([self.size_x + 1, self.size_y + 1]),
+        obs_space_noimg = [
+            # MultiBinary([self.size_x + 1, self.size_y + 1]), MultiBinary([self.size_x + 1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
@@ -786,7 +787,7 @@ class TankTrouble(ParallelEnv):
 
         observations = {"0": {"observation": gymnasium.spaces.utils.flatten(self.observation_spaces["0"],
                                                                             (self.get_conv_obs(0).flatten(),
-                                                                             self.horizontal_walls, self.vertical_walls,
+                                                                             # self.horizontal_walls, self.vertical_walls,
                                                                             [self.p1_x, self.p1_y, self.p1_v,
                                                                               self.p1_direction],
                                                                              [self.p2_x, self.p2_y, self.p2_v,
@@ -822,7 +823,7 @@ class TankTrouble(ParallelEnv):
                               },
                         "1": {"observation": gymnasium.spaces.utils.flatten(self.observation_spaces["1"],
                                                                             (self.get_conv_obs(1).flatten(),
-                                                                             self.horizontal_walls, self.vertical_walls,
+                                                                             # self.horizontal_walls, self.vertical_walls,
                                                                             [self.p2_x, self.p2_y, self.p2_v,
                                                                               self.p2_direction],
                                                                              [self.p1_x, self.p1_y, self.p1_v,
@@ -863,12 +864,13 @@ class TankTrouble(ParallelEnv):
         # we make an image of the scene, of resolution s_x*3, s_y*3
         # we have one channel for the walls, one for the active player, one for the opponent, one for the balls
         img = np.zeros((self.size_x * 3, self.size_y * 3, 5))
+        img[:, :, 0] = 1
         for i in range(self.size_x):
             for j in range(self.size_y):
                 if self.horizontal_walls[i][j]:
-                    img[i * 3:(i + 1) * 3 + 1, j*3, 0] = 1
+                    img[i * 3:(i + 1) * 3 + 1, j*3, 0] = 0
                 if self.vertical_walls[i][j]:
-                    img[i * 3, j * 3:(j + 1) * 3 + 1, 0] = 1
+                    img[i * 3, j * 3:(j + 1) * 3 + 1, 0] = 0
 
         player_pos = (self.p1_x, self.p1_y) if player_idx == 0 else (self.p2_x, self.p2_y)
         opponent_pos = (self.p2_x, self.p2_y) if player_idx == 0 else (self.p1_x, self.p1_y)

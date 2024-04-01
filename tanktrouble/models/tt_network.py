@@ -83,11 +83,11 @@ class DQN_TT(nn.Module):
         self.atoms = atoms
         if use_img:
             self.cnet = nn.Sequential(
-                layer_init(nn.Conv2d(c, 16, kernel_size=3, stride=2)),
+                layer_init(nn.Conv2d(c, 16, kernel_size=3, stride=1, padding=1)),
                 nn.ReLU(inplace=True),
-                layer_init(nn.Conv2d(16, 32, kernel_size=3, stride=2)),
+                layer_init(nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)),
                 nn.ReLU(inplace=True),
-                layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2)),
+                layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),
                 nn.ReLU(inplace=True),
                 nn.Flatten(),
             )

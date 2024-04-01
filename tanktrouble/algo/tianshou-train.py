@@ -38,7 +38,7 @@ from league import LeaguePolicy
 
 from pettingzoo.classic import tictactoe_v3
 
-is_distrib = True
+is_distrib = False
 icm = False
 import multiprocessing
 
@@ -345,10 +345,10 @@ if __name__ == "__main__":
 
     def train_fn(epoch, env_step):
         global wins, draws, losses
-        eps = 0.2
+        eps = 0.1
         if env_step > 100_000:
             eps = 0.1
-            eps -= 0.002 * (env_step - 100_000)
+            eps -= 0.001 * (env_step - 100_000)
             eps = max(0.01, eps)
         policy.policies[agents[1]].set_eps(eps)
         # policy.policies[agents[0]].update_idx()
@@ -376,15 +376,15 @@ if __name__ == "__main__":
             train_collector=train_collector,
             test_collector=test_collector,
             max_epoch=5000,
-            step_per_epoch=20_000,
+            step_per_epoch=50_000,
             step_per_collect=10,
-            episode_per_test=20,
+            episode_per_test=180,
             batch_size=16,
             train_fn=train_fn,
             test_fn=test_fn,
             stop_fn=stop_fn,
             save_best_fn=save_best_fn,
-            update_per_step=.08,
+            update_per_step=.1,
             test_in_train=False,
             reward_metric=reward_metric,
         ).run()
