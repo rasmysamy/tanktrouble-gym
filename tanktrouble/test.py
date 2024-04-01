@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import env.tanktrouble_env as tanktrouble
 
 pressed = {'w': False, 's': False, 'a': False, 'd': False, 'up': False, 'down': False, 'left': False, 'right': False,
-           'fire': False, 'enter': False}
+           'fire': False, 'enter': False, 'esc': False}
 
 plt.rcParams['keymap.save'].remove('s')
 
@@ -42,6 +42,8 @@ def on_release(key):
             pressed['left'] = False
         elif key is keyboard.Key.right:
             pressed['right'] = False
+        elif key is keyboard.Key.esc:
+            pressed['esc'] = True
         return
     print(key.char, "released")
     pressed[key.char] = False
@@ -83,9 +85,10 @@ def loop():
     pressed['fire'] = False
     pressed['enter'] = False
 
+
     # print(actions_1)
 
-    # observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": actions_2})
+    observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": actions_2})
 
     print(f"vert walls : {env.vertical_walls}")
     print(f"horiz walls : {env.horizontal_walls}")
@@ -100,11 +103,20 @@ def loop():
 
     sleep(1.0 / frame_rate)
 
-    while not pressed['enter']:
-        sleep(1.0 / frame_rate)
-        env.pygame_render()
+    #make pyplot interactive
+    plt.ion()
+    plt.draw()
+    env.pyplot_show_player_img(0)
+    plt.show()
 
-    env.reset()
+    # while not pressed['enter']:
+        # sleep(1.0 / frame_rate)
+    plt.pause(.001)
+    env.pygame_render()
+
+    if pressed['esc']:
+        env.reset()
+    pressed['esc'] = False
 
     # print(env.p1_x)
     # print(env.p1_y)

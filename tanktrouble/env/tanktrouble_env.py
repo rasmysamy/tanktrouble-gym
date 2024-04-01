@@ -6,8 +6,8 @@ from pettingzoo import ParallelEnv
 
 import functools
 import random
-import jax
-import chex
+# import jax
+# import chex
 
 from copy import copy, deepcopy
 from math import sqrt
@@ -20,6 +20,8 @@ import numpy as np
 env_id = 0
 
 fixed_walls = True
+
+image_in_obs = True
 
 class Ball:
     def __init__(self, x=-100.0, y=-100.0, vx=-100.0, vy=-100.0, life=-1):
@@ -104,8 +106,8 @@ class TankTrouble(ParallelEnv):
         self.observation_spaces = dict()
         self.action_spaces["0"] = MultiBinary(5)
         self.action_spaces["1"] = MultiBinary(5)
-        self.observation_spaces["0"] = Tuple(
-            [MultiBinary([self.size_x + 1, self.size_y + 1]), MultiBinary([self.size_x + 1, self.size_y + 1]),
+
+        obs_space_noimg = [MultiBinary([self.size_x + 1, self.size_y + 1]), MultiBinary([self.size_x + 1, self.size_y + 1]),
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
              # self state
              Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
@@ -116,20 +118,15 @@ class TankTrouble(ParallelEnv):
              Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)),  # other balls remaining life
              MultiBinary([self.max_balls]),  # own balls valid
              MultiBinary([self.max_balls]),  # other balls valid
-             Box(low=0, high=self.remaining_time, shape=(1,))])
-        self.observation_spaces["1"] = Tuple(
-            [MultiBinary([self.size_x + 1, self.size_y + 1]), MultiBinary([self.size_x + 1, self.size_y + 1]),
-             Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
-             # self state
-             Box(low=min(-self.max_speed, 0), high=max(self.max_speed, self.size_x, self.size_y), shape=(4,)),
-             # other state
-             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # own balls
-             Box(low=0, high=max(self.size_y, self.size_x, self.ball_speed), shape=(4, self.max_balls)),  # other balls
-             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)),  # own balls remaining life
-             Box(low=0, high=self.remaining_time, shape=(1, self.max_balls)),  # other balls remaining life
-             MultiBinary([self.max_balls]),  # own balls valid
-             MultiBinary([self.max_balls]),  # other balls valid
-             Box(low=0, high=self.remaining_time, shape=(1,))])
+             Box(low=0, high=self.remaining_time, shape=(1,))]
+
+        self.img_size = (self.size_x * 3, self.size_y * 3, 5)
+
+        obs_space_img = Tuple([Box(low=0, high=255, shape=self.img_size)] + obs_space_noimg)
+        obs_space = obs_space_img if image_in_obs else Tuple(obs_space_noimg)
+
+        self.observation_spaces["0"] = obs_space
+        self.observation_spaces["1"] = obs_space
         self.observation_shape = gymnasium.spaces.flatdim(self.observation_spaces["0"])
         self.action_shape = gymnasium.spaces.flatdim(self.action_spaces["0"])
 
@@ -764,11 +761,11 @@ class TankTrouble(ParallelEnv):
 
         if (int(self.p1_x), int(self.p1_y)) not in self.seen_cells["0"]:
             self.seen_cells["0"].add((int(self.p1_x), int(self.p1_y)))
-            rewards[0] += 0.01
+            rewards[0] += 0.003
 
         if (int(self.p2_x), int(self.p2_y)) not in self.seen_cells["1"]:
             self.seen_cells["1"].add((int(self.p2_x), int(self.p2_y)))
-            rewards[1] += 0.01
+            rewards[1] += 0.003
 
         dones = {"0": dones["0"], "1": dones["1"]}
         rewards = {"0": rewards[0], "1": rewards[1]}
@@ -788,8 +785,9 @@ class TankTrouble(ParallelEnv):
         fill = lambda x, y: [-1 if i >= len(x) else x[i] for i in range(y)]
 
         observations = {"0": {"observation": gymnasium.spaces.utils.flatten(self.observation_spaces["0"],
-                                                                            (self.horizontal_walls, self.vertical_walls,
-                                                                             [self.p1_x, self.p1_y, self.p1_v,
+                                                                            (self.get_conv_obs(0).flatten(),
+                                                                             self.horizontal_walls, self.vertical_walls,
+                                                                            [self.p1_x, self.p1_y, self.p1_v,
                                                                               self.p1_direction],
                                                                              [self.p2_x, self.p2_y, self.p2_v,
                                                                               self.p2_direction],
@@ -823,8 +821,9 @@ class TankTrouble(ParallelEnv):
                               "action_mask": self.mask,
                               },
                         "1": {"observation": gymnasium.spaces.utils.flatten(self.observation_spaces["1"],
-                                                                            (self.horizontal_walls, self.vertical_walls,
-                                                                             [self.p2_x, self.p2_y, self.p2_v,
+                                                                            (self.get_conv_obs(1).flatten(),
+                                                                             self.horizontal_walls, self.vertical_walls,
+                                                                            [self.p2_x, self.p2_y, self.p2_v,
                                                                               self.p2_direction],
                                                                              [self.p1_x, self.p1_y, self.p1_v,
                                                                               self.p1_direction],
@@ -859,6 +858,47 @@ class TankTrouble(ParallelEnv):
                         }
 
         return observations
+
+    def get_conv_obs(self, player_idx):
+        # we make an image of the scene, of resolution s_x*3, s_y*3
+        # we have one channel for the walls, one for the active player, one for the opponent, one for the balls
+        img = np.zeros((self.size_x * 3, self.size_y * 3, 5))
+        for i in range(self.size_x):
+            for j in range(self.size_y):
+                if self.horizontal_walls[i][j]:
+                    img[i * 3:(i + 1) * 3 + 1, j*3, 0] = 1
+                if self.vertical_walls[i][j]:
+                    img[i * 3, j * 3:(j + 1) * 3 + 1, 0] = 1
+
+        player_pos = (self.p1_x, self.p1_y) if player_idx == 0 else (self.p2_x, self.p2_y)
+        opponent_pos = (self.p2_x, self.p2_y) if player_idx == 0 else (self.p1_x, self.p1_y)
+        rounded_pos = (int(player_pos[0] * 3), int(player_pos[1] * 3))
+        img[rounded_pos[0], rounded_pos[1], 1] = 1
+        rounded_pos = (int(opponent_pos[0] * 3), int(opponent_pos[1] * 3))
+        img[rounded_pos[0], rounded_pos[1], 2] = 1
+        for ball in self.p1_balls:
+            if ball.life > 0:
+                rounded_pos = (int(ball.x * 3), int(ball.y * 3))
+                img[rounded_pos[0], rounded_pos[1], 3] += 1
+        for ball in self.p2_balls:
+            if ball.life > 0:
+                rounded_pos = (int(ball.x * 3), int(ball.y * 3))
+                img[rounded_pos[0], rounded_pos[1], 4] += 1
+
+        return img
+
+    def pyplot_show_player_img(self, player_idx):
+        img = self.get_conv_obs(player_idx)
+        # convert each channel of the image to a 0-255 scale
+        imgs = [(np.rot90(img[:,:,i]) * 255).astype(np.uint8) for i in range(5)]
+        # concatenate the images
+        img = np.concatenate(imgs, axis=1)
+        # show the image using pyplot
+        plt.imshow(img)
+
+
+
+
 
     def render(self, framerate=120.0):
         self.pygame_render()
