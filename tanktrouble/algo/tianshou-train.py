@@ -38,7 +38,7 @@ from league import LeaguePolicy
 
 from pettingzoo.classic import tictactoe_v3
 
-is_distrib = False
+is_distrib = True
 icm = False
 import multiprocessing
 
@@ -61,7 +61,7 @@ def _get_agents(
         if isinstance(env.observation_space, gymnasium.spaces.Dict)
         else env.observation_space
     )
-    hidden_sizes = [512]
+    hidden_sizes = [512, 64]
     if agent_learn is None:
         # model
         action_dim = gymnasium.spaces.utils.flatdim(env.action_space)
@@ -102,7 +102,7 @@ def _get_agents(
                 optim=optim,
                 # discount_factor=0.98,
                 estimation_step=5,
-                target_update_freq=500,
+                target_update_freq=1500,
                 action_space=env.action_space,
                 is_double=True,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -111,7 +111,7 @@ def _get_agents(
                 optim=optim_fixed,
                 # discount_factor=0.98,
                 estimation_step=5,
-                target_update_freq=500,
+                target_update_freq=1500,
                 action_space=env.action_space,
                 is_double=True,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -243,8 +243,8 @@ if __name__ == "__main__":
         return env
 
 
-    train_envs = SubprocVectorEnv([_get_env for _ in range(10)])
-    test_envs = SubprocVectorEnv([_get_env for _ in range(10)])
+    train_envs = SubprocVectorEnv([_get_env for _ in range(32)])
+    test_envs = SubprocVectorEnv([_get_env for _ in range(32)])
 
     # seed
     seed = 1
@@ -261,7 +261,7 @@ if __name__ == "__main__":
         policy,
         train_envs,
         # HERVectorReplayBuffer(20_000, len(train_envs), compute_reward_fn=lambda x: x[1], horizon=1000),
-        VectorReplayBuffer(100_000, len(train_envs)),
+        VectorReplayBuffer(300_000, len(train_envs)),
         # PrioritizedVectorReplayBuffer(80_000, len(train_envs), alpha=0.6, beta=0.4, weight_norm=True, ignore_obs_next=True),
         exploration_noise=True,
     )
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     # test_collector.collect = test_collector.collect___r
 
     thresh_win_rate = 0.6
-    thresh_in_a_row = 3
+    thresh_in_a_row = 1
     in_a_row = 0
     wins = 0
     losses = 0
@@ -376,10 +376,10 @@ if __name__ == "__main__":
             train_collector=train_collector,
             test_collector=test_collector,
             max_epoch=5000,
-            step_per_epoch=50_000,
+            step_per_epoch=150_000,
             step_per_collect=10,
-            episode_per_test=180,
-            batch_size=16,
+            episode_per_test=300,
+            batch_size=32,
             train_fn=train_fn,
             test_fn=test_fn,
             stop_fn=stop_fn,
