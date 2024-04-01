@@ -32,7 +32,7 @@ from tianshou.utils.net.common import Net
 from tianshou.utils.net.discrete import IntrinsicCuriosityModule
 
 import tanktrouble.env.tanktrouble_env as tanktrouble
-from tanktrouble.models.tt_network import DQN_TT
+from tanktrouble.models.tt_network import DQN_TT, Rainbow
 
 from league import LeaguePolicy
 
@@ -85,7 +85,7 @@ def _get_agents(
                 device="cuda" if torch.cuda.is_available() else "cpu",
                 use_img=tanktrouble.image_in_obs,
                 grad=grad,
-                features_only=features_only,
+                features_only=features_only or is_distrib,
                 atoms=51 if is_distrib else 1,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -156,6 +156,8 @@ def _get_agents(
             ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if is_distrib:
+            rnet = Rainbow(net)
+            rnet_fixed = Rainbow(net)
             agent_learn = RainbowPolicy(model=net, optim=optim, action_space=env.action_space, estimation_step=4,
                                         target_update_freq=1000).to("cuda" if torch.cuda.is_available() else "cpu")
             agent_fixed = RainbowPolicy(model=net_fixed, optim=optim_fixed, action_space=env.action_space,
