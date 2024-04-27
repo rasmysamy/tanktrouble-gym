@@ -228,19 +228,17 @@ def _get_agents(
     # agents = [do_nothing_agent, agent_learn]
     agents = [agent_fixed, agent_learn]
     policy = MultiAgentPolicyManager(policies=agents, env=env)
-    # policy.post_process_fn = lambda *args, **kwargs: multi_post_process(policy, *args, **kwargs)
     return policy, optim, env.agents
 
 
 def _get_env():
-    """This function is needed to provide callables for DummyVectorEnv."""
     env = tanktrouble.TankTrouble()
     env.reset()
     env.set_onehot(True)
     return PettingZooEnv(parallel_to_aec(env))
 
 
-def watch_self_play(user_play=True):
+def watch_self_play(user_play=False):
     if user_play:
         from pynput import keyboard
         pressed = {'w': False, 's': False, 'a': False, 'd': False, 'up': False, 'down': False, 'left': False,
@@ -294,8 +292,8 @@ def watch_self_play(user_play=True):
     policy, optim, ag = _get_agents(league=False)
     policy.policies[ag[1]].load_state_dict(torch.load("log/ttt/dqn/policy.pth"))
     # policy.policies[ag[0]].load_state_dict(policy.policies[ag[1]].state_dict().copy())
-    policy.policies[ag[1]].set_eps(0.002)
-    policy.policies[ag[0]].set_eps(0.002)
+    policy.policies[ag[1]].set_eps(0.001)
+    policy.policies[ag[0]].set_eps(0.001)
     if os.path.islink("log/ttt/dqn/policy.pth"):
         link_target = os.readlink("log/ttt/dqn/policy.pth")
     else:
@@ -328,8 +326,6 @@ def watch_self_play(user_play=True):
                 act1 = env.action_to_onehot(act1)
                 pressed['fire'] = False
             act2 = policy.policies[ag[1]].compute_action(p2_obs)
-            if act2 != 0:
-                print("DID SOMETHING!!!!")
             act2 = policy.policies[ag[1]].exploration_noise(np.array([act2]), b2)[0]
             if done["0"]:
                 if link_target is not None:
@@ -462,7 +458,7 @@ if __name__ == "__main__":
 
     def train_fn(epoch, env_step):
         # choose random opponent
-        opp_idx = np.random.randint(0, max_opps)
+        # opp_idx = np.random.randint(0, max_opps)
         # policy.replace_policy(opponent_list[opp_idx], 0)
         # policy.policies[agents[0]].load_state_dict(opponent_list[opp_idx].state_dict().copy())
         global wins, draws, losses
