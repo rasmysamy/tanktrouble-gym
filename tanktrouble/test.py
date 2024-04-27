@@ -90,24 +90,24 @@ def loop():
 
     observations, rewards, terminations, truncations, infos = env.step({"0": actions_1, "1": actions_2})
 
-    print(f"vert walls : {env.vertical_walls}")
-    print(f"horiz walls : {env.horizontal_walls}")
+    # print(f"vert walls : {env.vertical_walls}")
+    # print(f"horiz walls : {env.horizontal_walls}")
 
     # print(type(observations))
     # print(observations)
 
     # print(terminations)
 
-    # if any(terminations.values()):
-    #     env.reset()
+    if any(terminations.values()):
+        env.reset()
 
     sleep(1.0 / frame_rate)
 
     #make pyplot interactive
-    plt.ion()
-    plt.draw()
-    env.pyplot_show_player_img(0)
-    plt.show()
+    # plt.ion()
+    # plt.draw()
+    # env.pyplot_show_player_img(0)
+    # plt.show()
 
     # while not pressed['enter']:
         # sleep(1.0 / frame_rate)

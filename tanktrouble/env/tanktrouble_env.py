@@ -91,7 +91,8 @@ class TankTrouble(ParallelEnv):
         self.action_transform = lambda x: x
         self.action_untransform = lambda x: x
 
-        self.min_start_dist = max(self.size_x, self.size_y) / 1.33
+        self.min_start_dist = 1
+        self.max_start_dist = max(self.size_y, self.size_x) / 1.5
 
         self.p1_v = 0.0
         self.p2_v = 0.0
@@ -180,7 +181,8 @@ class TankTrouble(ParallelEnv):
             self.p1_y = random.randint(0, self.size_y - 1) + 0.5
             self.p2_x = random.randint(0, self.size_x - 1) + 0.5
             self.p2_y = random.randint(0, self.size_y - 1) + 0.5
-            if sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2) > self.min_start_dist:
+            dist = (sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2))
+            if self.min_start_dist < dist < self.max_start_dist:
                 break
 
         self.p1_direction = random.random() * 2 * math.pi
@@ -224,15 +226,13 @@ class TankTrouble(ParallelEnv):
                     idx in range(self.size_x + 1)]  # outside walls are always there
                 # check if there is a path from p1 to p2
 
-
-
-
             while True:
                 self.p1_x = random.randint(0, self.size_x - 1) + 0.5
                 self.p1_y = random.randint(0, self.size_y - 1) + 0.5
                 self.p2_x = random.randint(0, self.size_x - 1) + 0.5
                 self.p2_y = random.randint(0, self.size_y - 1) + 0.5
-                if sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2) > self.min_start_dist:
+                dist = (sqrt((self.p1_x - self.p2_x) ** 2 + (self.p1_y - self.p2_y) ** 2))
+                if self.min_start_dist < dist < self.max_start_dist:
                     break
 
             if self.is_path(self.p1_x, self.p1_y, self.p2_x, self.p2_y):

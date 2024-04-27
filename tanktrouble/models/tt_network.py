@@ -16,7 +16,7 @@ from tianshou.highlevel.module.intermediate import (
 )
 from tianshou.utils.net.discrete import Actor, NoisyLinear
 
-
+# Presque identique au réseau utilisé dans l'exemple Atari de Tianshou
 def layer_init(layer: nn.Module, std: float = np.sqrt(2), bias_const: float = 0.0) -> nn.Module:
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
@@ -47,11 +47,6 @@ def scale_obs(module: nn.Module, denom: float = 255.0) -> nn.Module:
 
 
 class DQN_TT(nn.Module):
-    """Reference: Human-level control through deep reinforcement learning.
-
-    For advanced usage (how to customize the network), please refer to
-    :ref:`build_the_network`.
-    """
 
     def __init__(
         self,
@@ -83,12 +78,13 @@ class DQN_TT(nn.Module):
         self.atoms = atoms
         if use_img:
             self.cnet = nn.Sequential(
-                layer_init(nn.Conv2d(c, 16, kernel_size=3, stride=1, padding=1)),
-                nn.ReLU(inplace=True),
-                layer_init(nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)),
+                layer_init(nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1)),
                 nn.ReLU(inplace=True),
                 layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),
                 nn.ReLU(inplace=True),
+                layer_init(nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(kernel_size=2),
                 nn.Flatten(),
             )
             with torch.no_grad():
@@ -161,6 +157,7 @@ class Rainbow(DQN_TT):
         c: int,
         h: int,
         w: int,
+        rest: int,
         action_shape: Sequence[int],
         num_atoms: int = 51,
         noisy_std: float = 0.5,
@@ -168,7 +165,7 @@ class Rainbow(DQN_TT):
         is_dueling: bool = True,
         is_noisy: bool = True,
     ) -> None:
-        super().__init__(c, h, w, action_shape, device, features_only=True)
+        super().__init__(c=c, h=h, w=w, rest=rest, action_shape=action_shape, device=device, features_only=True)
         self.action_num = np.prod(action_shape)
         self.num_atoms = num_atoms
 

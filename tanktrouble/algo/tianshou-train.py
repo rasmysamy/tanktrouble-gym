@@ -8,6 +8,8 @@ Requirements:
 pettingzoo == 1.22.0
 git+https://github.com/thu-ml/tianshou
 """
+from typing import Any, Literal, Protocol, Self, cast, overload
+
 import argparse
 import copy
 import datetime
@@ -23,7 +25,8 @@ import numpy as np
 import pygame
 import torch
 from pettingzoo.utils import parallel_to_aec
-from tianshou.data import Collector, VectorReplayBuffer, PrioritizedVectorReplayBuffer
+from tianshou.data import Collector, VectorReplayBuffer, PrioritizedVectorReplayBuffer, ReplayBuffer
+from tianshou.data.batch import BatchProtocol, Batch
 from tianshou.env import DummyVectorEnv, SubprocVectorEnv
 from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.policy import BasePolicy, DQNPolicy, MultiAgentPolicyManager, RandomPolicy, RainbowPolicy, ICMPolicy
@@ -38,7 +41,7 @@ from league import LeaguePolicy
 
 from pettingzoo.classic import tictactoe_v3
 
-is_distrib = True
+is_distrib = False
 icm = False
 import multiprocessing
 
@@ -54,6 +57,8 @@ def _get_agents(
         agent_opponent: Optional[BasePolicy] = None,
         optim: Optional[torch.optim.Optimizer] = None,
         league=True,
+        single=False,
+        watch=False,
 ) -> Tuple[BasePolicy, torch.optim.Optimizer, list]:
     env = _get_env()
     observation_space = (
@@ -61,7 +66,7 @@ def _get_agents(
         if isinstance(env.observation_space, gymnasium.spaces.Dict)
         else env.observation_space
     )
-    hidden_sizes = [512, 64]
+    hidden_sizes = [512]
     if agent_learn is None:
         # model
         action_dim = gymnasium.spaces.utils.flatdim(env.action_space)
@@ -88,6 +93,17 @@ def _get_agents(
                 features_only=features_only or is_distrib,
                 atoms=51 if is_distrib else 1,
             ).to("cuda" if torch.cuda.is_available() else "cpu")
+
+        def make_rainbow_net():
+            return Rainbow(
+                rest=gymnasium.spaces.utils.flatdim(observation_space) - (
+                    prod(img_size) if tanktrouble.image_in_obs else 0),
+                action_shape=[action_dim],
+                c=img_size[2] if tanktrouble.image_in_obs else 0,
+                h=img_size[1] if tanktrouble.image_in_obs else 0,
+                w=img_size[0] if tanktrouble.image_in_obs else 0,
+                device="cuda" if torch.cuda.is_available() else "cpu",
+            )
 
         net = make_net()
         net_fixed = make_net(grad=False).train(False)
@@ -156,13 +172,16 @@ def _get_agents(
             ).to("cuda" if torch.cuda.is_available() else "cpu")
 
         if is_distrib:
-            rnet = Rainbow(net)
-            rnet_fixed = Rainbow(net)
-            agent_learn = RainbowPolicy(model=net, optim=optim, action_space=env.action_space, estimation_step=4,
+            rnet = make_rainbow_net()
+            rnet_fixed = make_rainbow_net()
+            agent_learn = RainbowPolicy(model=rnet, optim=optim, action_space=env.action_space, estimation_step=4,
                                         target_update_freq=1000).to("cuda" if torch.cuda.is_available() else "cpu")
-            agent_fixed = RainbowPolicy(model=net_fixed, optim=optim_fixed, action_space=env.action_space,
+            agent_fixed = RainbowPolicy(model=rnet_fixed, optim=optim_fixed, action_space=env.action_space,
                                         estimation_step=4, target_update_freq=1000).to(
                 "cuda" if torch.cuda.is_available() else "cpu")
+
+    if single:
+        return agent_fixed
 
     from tianshou.data import Batch
 
@@ -177,9 +196,39 @@ def _get_agents(
         logits[~mask] = -np.inf
         return Batch(act=np.zeros_like(logits.argmax(axis=-1)))
 
-    agents = [LeaguePolicy([agent_fixed], max_agents=10, action_space=env.action_space) if league else agent_fixed,
-              agent_learn]
+    def _nothing_set_eps(self, eps):
+        self.eps = eps
+
+    def _nothing_exploration_noise(self, act, batch):
+        return np.where(np.random.rand(*act.shape) < self.eps, np.random.randint(0, act.shape[-1], size=act.shape[0]), act)
+
+    train_agent_idx = "1"
+
+    do_nothing_agent = RandomPolicy(action_space=env.action_space)
+    do_nothing_agent.forward = do_nothing.__get__(do_nothing_agent)
+    do_nothing_agent.set_eps = _nothing_set_eps.__get__(do_nothing_agent)
+    do_nothing_agent.exploration_noise = _nothing_exploration_noise.__get__(do_nothing_agent)
+    do_nothing_agent.set_eps(0)
+
+    def multi_post_process(
+        self,
+        batch: BatchProtocol,
+        buffer: ReplayBuffer,
+        indices: np.ndarray,
+    ) -> None:
+        # concat all weights:
+        for k, val in batch.items():
+            agent_index = np.nonzero(batch.obs.agent_id == k)[0]
+            if k == train_agent_idx:
+                self.policies[k].post_process_fn(batch=val, buffer=buffer, indices=indices[agent_index])
+
+    # agents = [LeaguePolicy([agent_fixed], max_agents=10, action_space=env.action_space) if league else agent_fixed,
+    #           agent_learn]
+    # agents = [RandomPolicy(action_space=env.action_space), agent_learn]
+    # agents = [do_nothing_agent, agent_learn]
+    agents = [agent_fixed, agent_learn]
     policy = MultiAgentPolicyManager(policies=agents, env=env)
+    # policy.post_process_fn = lambda *args, **kwargs: multi_post_process(policy, *args, **kwargs)
     return policy, optim, env.agents
 
 
@@ -191,15 +240,62 @@ def _get_env():
     return PettingZooEnv(parallel_to_aec(env))
 
 
-def watch_self_play():
+def watch_self_play(user_play=True):
+    if user_play:
+        from pynput import keyboard
+        pressed = {'w': False, 's': False, 'a': False, 'd': False, 'up': False, 'down': False, 'left': False,
+                   'right': False,
+                   'fire': False, 'enter': False, 'esc': False}
+
+
+        def on_press(key):
+            if isinstance(key, keyboard.Key):
+                if key is keyboard.Key.up:
+                    pressed['up'] = True
+                elif key is keyboard.Key.down:
+                    pressed['down'] = True
+                elif key is keyboard.Key.left:
+                    pressed['left'] = True
+                elif key is keyboard.Key.right:
+                    pressed['right'] = True
+                return
+            print(key.char, "pressed")
+            pressed[key.char] = True
+
+        def on_release(key):
+            if isinstance(key, keyboard.Key):
+                if key is keyboard.Key.space:
+                    pressed['fire'] = True
+                elif key is keyboard.Key.enter:
+                    pressed['enter'] = True
+                elif key is keyboard.Key.up:
+                    pressed['up'] = False
+                elif key is keyboard.Key.down:
+                    pressed['down'] = False
+                elif key is keyboard.Key.left:
+                    pressed['left'] = False
+                elif key is keyboard.Key.right:
+                    pressed['right'] = False
+                elif key is keyboard.Key.esc:
+                    pressed['esc'] = True
+                return
+            print(key.char, "released")
+            pressed[key.char] = False
+
+        listener = keyboard.Listener(
+            on_press=on_press,
+            on_release=on_release)
+        listener.start()
+
+
     env = tanktrouble.TankTrouble()
     env.reset()
     env.set_onehot(True)
     policy, optim, ag = _get_agents(league=False)
     policy.policies[ag[1]].load_state_dict(torch.load("log/ttt/dqn/policy.pth"))
-    policy.policies[ag[0]].load_state_dict(policy.policies[ag[1]].state_dict().copy())
-    policy.policies[ag[1]].set_eps(0.01)
-    policy.policies[ag[0]].set_eps(0.01)
+    # policy.policies[ag[0]].load_state_dict(policy.policies[ag[1]].state_dict().copy())
+    policy.policies[ag[1]].set_eps(0.002)
+    policy.policies[ag[0]].set_eps(0.002)
     if os.path.islink("log/ttt/dqn/policy.pth"):
         link_target = os.readlink("log/ttt/dqn/policy.pth")
     else:
@@ -208,7 +304,8 @@ def watch_self_play():
         obs, _ = env.reset()
         p1_obs = obs["0"]["observation"]
         p2_obs = obs["1"]["observation"]
-        act1 = policy.policies[ag[0]].compute_action(p1_obs)
+        # act1 = policy.policies[ag[0]].compute_action(p1_obs)
+        act1 = 0
         act2 = policy.policies[ag[1]].compute_action(p2_obs)
         while True:
             env.render()
@@ -216,12 +313,24 @@ def watch_self_play():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
-            sleep(1 / 100.0)
+            sleep(1 / 60.0)
+            # print(act2)
             obs, rews, done, _, _ = env.step({"0": act1, "1": act2})
             p1_obs = obs["0"]["observation"]
             p2_obs = obs["1"]["observation"]
-            act1 = policy.policies[ag[0]].compute_action(p1_obs)
+            b1 = Batch(obs=p1_obs, act=act1, rew=rews["0"], done=done["0"])
+            b2 = Batch(obs=p2_obs, act=act2, rew=rews["1"], done=done["1"])
+            if not user_play:
+                act1 = policy.policies[ag[0]].compute_action(p1_obs)
+                act1 = policy.policies[ag[0]].exploration_noise(np.array([act1]), b1)[0]
+            else:
+                act1 = [pressed['w'], pressed['s'], pressed['a'], pressed['d'], pressed['fire']]
+                act1 = env.action_to_onehot(act1)
+                pressed['fire'] = False
             act2 = policy.policies[ag[1]].compute_action(p2_obs)
+            if act2 != 0:
+                print("DID SOMETHING!!!!")
+            act2 = policy.policies[ag[1]].exploration_noise(np.array([act2]), b2)[0]
             if done["0"]:
                 if link_target is not None:
                     if link_target != os.readlink("log/ttt/dqn/policy.pth"):
@@ -244,9 +353,11 @@ if __name__ == "__main__":
         env.always_render = True
         return env
 
+    env = _get_env()
 
-    train_envs = SubprocVectorEnv([_get_env for _ in range(32)])
-    test_envs = SubprocVectorEnv([_get_env for _ in range(32)])
+
+    train_envs = SubprocVectorEnv([_get_env for _ in range(8)])
+    test_envs = SubprocVectorEnv([_get_env for _ in range(8)])
 
     # seed
     seed = 1
@@ -263,8 +374,8 @@ if __name__ == "__main__":
         policy,
         train_envs,
         # HERVectorReplayBuffer(20_000, len(train_envs), compute_reward_fn=lambda x: x[1], horizon=1000),
-        VectorReplayBuffer(300_000, len(train_envs)),
-        # PrioritizedVectorReplayBuffer(80_000, len(train_envs), alpha=0.6, beta=0.4, weight_norm=True, ignore_obs_next=True),
+        VectorReplayBuffer(1_000_000, len(train_envs)),
+        # PrioritizedVectorReplayBuffer(1_000_000, len(train_envs), alpha=0.6, beta=0.4, weight_norm=True, ignore_obs_next=True),
         exploration_noise=True,
     )
     test_collector = Collector(policy, test_envs, exploration_noise=True)
@@ -299,11 +410,15 @@ if __name__ == "__main__":
     # test_collector.collect = test_collector.collect___r
 
     thresh_win_rate = 0.6
-    thresh_in_a_row = 1
+    thresh_in_a_row = 4
     in_a_row = 0
     wins = 0
     losses = 0
     draws = 0
+
+
+    max_opps = 10
+    opponent_list = [_get_agents(single=True) for _ in range(max_opps)]
 
     # ======== Step 4: Callback functions setup =========
     if watch:
@@ -338,7 +453,7 @@ if __name__ == "__main__":
         losses = 0
         draws = 0
 
-        if winlossrate > thresh_win_rate:
+        if winlossrate > thresh_win_rate and mean_rewards >= 0.2:
             in_a_row += 1
         else:
             in_a_row = 0
@@ -346,20 +461,30 @@ if __name__ == "__main__":
 
 
     def train_fn(epoch, env_step):
+        # choose random opponent
+        opp_idx = np.random.randint(0, max_opps)
+        # policy.replace_policy(opponent_list[opp_idx], 0)
+        # policy.policies[agents[0]].load_state_dict(opponent_list[opp_idx].state_dict().copy())
         global wins, draws, losses
-        eps = 0.1
-        if env_step > 100_000:
-            eps = 0.1
-            eps -= 0.001 * (env_step - 100_000)
-            eps = max(0.01, eps)
+        wins = 0
+        losses = 0
+        draws = 0
+        eps = 0.3
+        if env_step > 50_000:
+            eps -= 0.1 * (env_step - 50_000)/70_000
+            eps = max(0.003, eps)
         policy.policies[agents[1]].set_eps(eps)
         # policy.policies[agents[0]].update_idx()
-        policy.policies[agents[0]].set_eps(eps)
+        # policy.policies[agents[0]].set_eps(eps)
 
 
     def test_fn(epoch, env_step):
-        policy.policies[agents[1]].set_eps(0.01)
-        policy.policies[agents[0]].set_eps(0.01)
+        global wins, draws, losses
+        wins = 0
+        losses = 0
+        draws = 0
+        policy.policies[agents[1]].set_eps(0.001)
+        policy.policies[agents[0]].set_eps(0.001)
 
 
     def reward_metric(rews):
@@ -370,7 +495,12 @@ if __name__ == "__main__":
         return rews[:, 1]
 
 
+
+
+
     # ======== Step 5: Run the trainer =========
+
+
     gen_count = 10_000
     for i in range(gen_count):
         result = OffpolicyTrainer(
@@ -380,7 +510,7 @@ if __name__ == "__main__":
             max_epoch=5000,
             step_per_epoch=150_000,
             step_per_collect=10,
-            episode_per_test=300,
+            episode_per_test=40,
             batch_size=32,
             train_fn=train_fn,
             test_fn=test_fn,
@@ -399,7 +529,8 @@ if __name__ == "__main__":
         # policy.policies[agents[0]].push_agent(agent_copy, rotate=True)
 
         print(f"Generation {i + 1}/{gen_count} complete")
-        policy.policies[agents[0]].load_state_dict(policy.policies[agents[1]].state_dict().copy())
+        # policy.policies[agents[0]].load_state_dict(policy.policies[agents[1]].state_dict().copy())
+        opponent_list = [_get_agents(single=True).load_state_dict(policy.policies[agents[1]].state_dict().copy())] + opponent_list[:-1]
 
     # return result, policy.policies[agents[1]]
     print(f"\n==========Result==========\n{result}")
